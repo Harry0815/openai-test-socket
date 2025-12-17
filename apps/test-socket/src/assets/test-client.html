@@ -1,0 +1,465 @@
+
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Debug Audio Stream Test</title>
+  <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .section { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px; background: white; }
+    .debug { background: #f8f9fa; border-left: 4px solid #007bff; padding: 15px; margin: 10px 0; font-family: monospace; }
+    .error { background: #f8d7da; border-left: 4px solid #dc3545; padding: 15px; margin: 10px 0; }
+    .success { background: #d4edda; border-left: 4px solid #28a745; padding: 15px; margin: 10px 0; }
+    .audio-controls button { margin: 5px; padding: 12px 20px; border: none; border-radius: 5px; cursor: pointer; }
+    .btn-primary { background: #007bff; color: white; }
+    .btn-success { background: #28a745; color: white; }
+    .btn-warning { background: #ffc107; color: black; }
+    .progress-bar { width: 100%; height: 25px; background: #e9ecef; border-radius: 12px; overflow: hidden; margin: 10px 0; }
+    .progress-fill { height: 100%; background: #28a745; transition: width 0.3s ease; text-align: center; line-height: 25px; color: white; }
+    .connected { color: #28a745; font-weight: bold; }
+    .disconnected { color: #dc3545; font-weight: bold; }
+    .audio-item { padding: 15px; margin: 10px 0; border: 1px solid #dee2e6; border-radius: 8px; background: #fff; }
+    .format-info { font-size: 12px; color: #6c757d; margin-top: 5px; }
+    .browser-support { margin: 10px 0; padding: 10px; background: #e7f3ff; border-radius: 5px; }
+    audio { width: 100%; margin: 15px 0; }
+    pre { white-space: pre-wrap; font-size: 11px; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>🔧 Debug Audio Stream Test</h1>
+
+  <div class="section">
+    <h3>🔌 Verbindung</h3>
+    <div>Status: <span id="status" class="disconnected">Nicht verbunden</span></div>
+    <div class="audio-controls">
+      <button id="connectBtn" class="btn-primary">Verbinden</button>
+      <button id="disconnectBtn" disabled>Trennen</button>
+      <button id="refreshListBtn" disabled>Liste aktualisieren</button>
+      <button id="clearLogsBtn" class="btn-warning">Logs löschen</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>🌐 Browser Audio-Support</h3>
+    <div id="browserSupport" class="browser-support">Wird überprüft...</div>
+  </div>
+
+  <div class="section">
+    <h3>🎵 Audio Player & Debug</h3>
+    <audio id="audioPlayer" controls>
+      <p>Ihr Browser unterstützt das Audio-Element nicht.</p>
+    </audio>
+    <div><strong>Status:</strong> <span id="playbackStatus">Bereit</span></div>
+    <div class="progress-bar">
+      <div id="streamProgress" class="progress-fill" style="width: 0%">0%</div>
+    </div>
+    <div id="streamInfo"></div>
+
+    <h4>🔍 Debug-Informationen</h4>
+    <div id="debugInfo" class="debug">Noch keine Debug-Daten...</div>
+  </div>
+
+  <div class="section">
+    <h3>📁 Audio-Dateien</h3>
+    <div id="audioList">Noch keine Audio-Dateien geladen...</div>
+  </div>
+
+  <div class="section">
+    <h3>📋 Detaillierte Logs</h3>
+    <div id="messages" style="height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 15px; background: #f8f9fa; font-family: monospace; font-size: 12px;"></div>
+  </div>
+</div>
+
+<script>
+  let socket = null;
+  let streamBuffer = [];
+  let streamMetadata = null;
+  let allAudioFiles = [];
+  let debugData = {};
+
+  // DOM Elements
+  const status = document.getElementById('status');
+  const messages = document.getElementById('messages');
+  const connectBtn = document.getElementById('connectBtn');
+  const disconnectBtn = document.getElementById('disconnectBtn');
+  const refreshListBtn = document.getElementById('refreshListBtn');
+  const clearLogsBtn = document.getElementById('clearLogsBtn');
+  const audioList = document.getElementById('audioList');
+  const audioPlayer = document.getElementById('audioPlayer');
+  const playbackStatus = document.getElementById('playbackStatus');
+  const streamProgress = document.getElementById('streamProgress');
+  const streamInfo = document.getElementById('streamInfo');
+  const debugInfo = document.getElementById('debugInfo');
+  const browserSupport = document.getElementById('browserSupport');
+
+  function addMessage(message, type = 'info') {
+    const timestamp = new Date().toISOString();
+    const div = document.createElement('div');
+    div.innerHTML = `<strong>[${timestamp}]</strong> ${message}`;
+    div.style.color = type === 'error' ? '#dc3545' : type === 'success' ? '#28a745' : '#495057';
+    div.style.marginBottom = '5px';
+    messages.appendChild(div);
+    messages.scrollTop = messages.scrollHeight;
+    console.log(`[${type.toUpperCase()}] ${message}`);
+  }
+
+  function updateDebugInfo() {
+    const info = `
+Browser: ${navigator.userAgent}
+Audio Context State: ${typeof AudioContext !== 'undefined' ? 'Supported' : 'Not Supported'}
+Media Source Extensions: ${typeof MediaSource !== 'undefined' ? 'Supported' : 'Not Supported'}
+Current Stream Metadata: ${JSON.stringify(streamMetadata, null, 2)}
+Buffer Status: ${streamBuffer.length} chunks received
+Debug Data: ${JSON.stringify(debugData, null, 2)}
+            `.trim();
+    debugInfo.innerHTML = `<pre>${info}</pre>`;
+  }
+
+  function checkBrowserAudioSupport() {
+    const audio = document.createElement('audio');
+    const formats = {
+      'MP3': 'audio/mpeg',
+      'WAV': 'audio/wav',
+      'OGG': 'audio/ogg',
+      'MP4/M4A': 'audio/mp4',
+      'AAC': 'audio/aac',
+      'FLAC': 'audio/flac',
+      'OPUS': 'audio/opus'
+    };
+
+    let supportInfo = '<strong>Browser Audio-Format-Unterstützung:</strong><br>';
+
+    for (const [name, mime] of Object.entries(formats)) {
+      const support = audio.canPlayType(mime);
+      const status = support === 'probably' ? '✅ Vollständig' :
+        support === 'maybe' ? '⚠️ Möglich' : '❌ Nicht unterstützt';
+      supportInfo += `${name}: ${status} (${support})<br>`;
+    }
+
+    browserSupport.innerHTML = supportInfo;
+    addMessage(`Browser-Audio-Support überprüft`, 'info');
+  }
+
+  function updateStatus(text) {
+    playbackStatus.textContent = text;
+  }
+
+  function updateProgress(percentage) {
+    streamProgress.style.width = `${percentage}%`;
+    streamProgress.textContent = `${Math.round(percentage)}%`;
+  }
+
+  function formatFileSize(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  }
+
+  function displayAudioList(audioFiles) {
+    if (audioFiles.length === 0) {
+      audioList.innerHTML = '<p>Keine Audio-Dateien gefunden.</p>';
+      return;
+    }
+
+    const listHtml = audioFiles.map(file => `
+                <div class="audio-item">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <strong>${file.name}</strong>
+                            <span style="background: #007bff; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px;">
+                                ${file.format.toUpperCase()}
+                            </span>
+                        </div>
+                        <button onclick="streamAudio('${file.id}')" class="btn-primary">🎵 Stream & Debug</button>
+                    </div>
+                    <div class="format-info">
+                        MIME: ${file.mimeType} | Größe: ${formatFileSize(file.size)} | Kategorie: ${file.category}
+                        <br>Browser-Support: <span id="support-${file.format}">Wird überprüft...</span>
+                    </div>
+                </div>
+            `).join('');
+
+    audioList.innerHTML = listHtml;
+
+    // Check browser support for each format
+    audioFiles.forEach(file => {
+      const audio = document.createElement('audio');
+      const support = audio.canPlayType(file.mimeType);
+      const supportElement = document.getElementById(`support-${file.format}`);
+      if (supportElement) {
+        const status = support === 'probably' ? '✅ Vollständig' :
+          support === 'maybe' ? '⚠️ Möglich' : '❌ Nicht unterstützt';
+        supportElement.innerHTML = `${status} (${support})`;
+        supportElement.style.color = support === 'probably' ? '#28a745' :
+          support === 'maybe' ? '#ffc107' : '#dc3545';
+      }
+    });
+  }
+
+  function streamAudio(fileId) {
+    if (!socket || !socket.connected) {
+      addMessage('Nicht verbunden!', 'error');
+      return;
+    }
+
+    const file = allAudioFiles.find(f => f.id === fileId);
+    if (!file) {
+      addMessage('Datei nicht gefunden!', 'error');
+      return;
+    }
+
+    addMessage(`🚀 Streaming gestartet für: ${fileId}`, 'info');
+    addMessage(`📋 Datei-Info: ${file.mimeType}, ${formatFileSize(file.size)}`, 'info');
+
+    // Check if browser supports this format
+    const audio = document.createElement('audio');
+    const browserSupport = audio.canPlayType(file.mimeType);
+    addMessage(`🌐 Browser-Support für ${file.mimeType}: ${browserSupport}`, browserSupport === 'probably' ? 'success' : 'warn');
+
+    updateStatus('Stream wird angefordert...');
+    streamBuffer = [];
+    debugData = { fileId, originalMime: file.mimeType, browserSupport, startTime: Date.now() };
+
+    socket.emit('stream-audio', { fileId, chunkSize: 64 * 1024 });
+  }
+
+  function assembleAudioFromChunks() {
+    if (streamBuffer.length === 0 || !streamMetadata) {
+      addMessage('❌ Keine Stream-Daten zum Zusammensetzen', 'error');
+      return;
+    }
+
+    addMessage('🔧 Audio-Stream wird zusammengesetzt...', 'info');
+    updateStatus('Stream wird zusammengesetzt...');
+
+    try {
+      // Sortiere Chunks nach Index
+      streamBuffer.sort((a, b) => a.chunkIndex - b.chunkIndex);
+      addMessage(`📦 ${streamBuffer.length} Chunks sortiert`, 'info');
+
+      // Konvertiere Base64-Chunks zurück zu Binärdaten
+      const binaryData = streamBuffer.map((chunk, index) => {
+        try {
+          const binaryString = atob(chunk.data);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          return bytes;
+        } catch (error) {
+          addMessage(`❌ Fehler beim Dekodieren von Chunk ${index}: ${error.message}`, 'error');
+          throw error;
+        }
+      });
+
+      // Kombiniere alle Chunks
+      const totalLength = binaryData.reduce((sum, chunk) => sum + chunk.length, 0);
+      addMessage(`📏 Gesamtlänge: ${formatFileSize(totalLength)}`, 'info');
+
+      const combinedArray = new Uint8Array(totalLength);
+      let offset = 0;
+
+      binaryData.forEach((chunk, index) => {
+        combinedArray.set(chunk, offset);
+        offset += chunk.length;
+      });
+
+      // Finde das entsprechende Audio-File für MIME-Type
+      const audioFile = allAudioFiles.find(f => f.id === streamMetadata.fileId);
+      let mimeType = audioFile ? audioFile.mimeType : 'audio/mpeg';
+
+      addMessage(`🎭 Original MIME-Type: ${mimeType}`, 'info');
+
+      // Fallback für nicht unterstützte Formate
+      const audio = document.createElement('audio');
+      const browserSupport = audio.canPlayType(mimeType);
+
+      if (browserSupport === '' || browserSupport === 'no') {
+        addMessage(`⚠️ Browser unterstützt ${mimeType} nicht, verwende Fallback`, 'warn');
+
+        // Try common fallbacks
+        const fallbacks = ['audio/mpeg', 'audio/wav', 'audio/mp4'];
+        for (const fallback of fallbacks) {
+          if (audio.canPlayType(fallback) !== '') {
+            mimeType = fallback;
+            addMessage(`✅ Fallback zu ${mimeType} gefunden`, 'success');
+            break;
+          }
+        }
+      }
+
+      // Erstelle Blob
+      const audioBlob = new Blob([combinedArray], { type: mimeType });
+      addMessage(`📦 Blob erstellt: ${formatFileSize(audioBlob.size)} als ${mimeType}`, 'success');
+
+      // Erstelle URL
+      const audioUrl = URL.createObjectURL(audioBlob);
+      addMessage(`🔗 Blob-URL erstellt: ${audioUrl.substring(0, 50)}...`, 'info');
+
+      // Debug: Log first few bytes
+      const firstBytes = Array.from(combinedArray.slice(0, 16))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join(' ');
+      addMessage(`🔍 Erste 16 Bytes: ${firstBytes}`, 'info');
+
+      // Setze Audio-Source
+      audioPlayer.src = audioUrl;
+      audioPlayer.load();
+
+      // Event listeners für detailliertes Debugging
+      audioPlayer.onloadstart = () => {
+        addMessage('🔄 Audio-Element: loadstart', 'info');
+        updateStatus('Audio wird geladen...');
+      };
+
+      audioPlayer.onloadedmetadata = () => {
+        addMessage(`📊 Audio-Metadaten geladen: ${audioPlayer.duration}s`, 'success');
+      };
+
+      audioPlayer.oncanplay = () => {
+        addMessage('✅ Audio kann abgespielt werden', 'success');
+        updateStatus('Bereit zum Abspielen');
+      };
+
+      audioPlayer.onerror = (e) => {
+        const error = audioPlayer.error;
+        let errorMsg = 'Unbekannter Fehler';
+        if (error) {
+          switch (error.code) {
+            case 1: errorMsg = 'MEDIA_ERR_ABORTED - Wiedergabe abgebrochen'; break;
+            case 2: errorMsg = 'MEDIA_ERR_NETWORK - Netzwerkfehler'; break;
+            case 3: errorMsg = 'MEDIA_ERR_DECODE - Dekodierungsfehler'; break;
+            case 4: errorMsg = 'MEDIA_ERR_SRC_NOT_SUPPORTED - Format nicht unterstützt'; break;
+          }
+        }
+        addMessage(`❌ Audio-Player-Fehler: ${errorMsg}`, 'error');
+        updateStatus('Fehler bei der Wiedergabe');
+      };
+
+      // Versuche automatisches Abspielen
+      setTimeout(() => {
+        audioPlayer.play()
+          .then(() => {
+            addMessage('▶️ Automatische Wiedergabe gestartet', 'success');
+            updateStatus('Wird abgespielt');
+          })
+          .catch(error => {
+            addMessage(`⚠️ Automatische Wiedergabe fehlgeschlagen: ${error.message}`, 'warn');
+            addMessage('👆 Bitte manuell Play-Button klicken', 'info');
+            updateStatus('Bereit (manuelles Abspielen erforderlich)');
+          });
+      }, 1000);
+
+      // Update debug info
+      debugData.assemblyTime = Date.now() - debugData.startTime;
+      debugData.finalMimeType = mimeType;
+      debugData.blobSize = audioBlob.size;
+      debugData.audioUrl = audioUrl;
+      updateDebugInfo();
+
+    } catch (error) {
+      addMessage(`❌ Fehler beim Zusammensetzen: ${error.message}`, 'error');
+      addMessage(`📚 Stack: ${error.stack}`, 'error');
+      updateStatus('Fehler beim Zusammensetzen');
+    }
+  }
+
+  // Event Listeners
+  connectBtn.addEventListener('click', () => {
+    socket = io('http://localhost:3000', {
+      transports: ['websocket', 'polling'],
+      timeout: 10000,
+      forceNew: true
+    });
+
+    socket.on('connect', () => {
+      status.textContent = `Verbunden (ID: ${socket.id})`;
+      status.className = 'connected';
+      connectBtn.disabled = true;
+      disconnectBtn.disabled = false;
+      refreshListBtn.disabled = false;
+      addMessage('✅ Verbindung hergestellt!', 'success');
+    });
+
+    socket.on('disconnect', () => {
+      status.textContent = 'Nicht verbunden';
+      status.className = 'disconnected';
+      connectBtn.disabled = false;
+      disconnectBtn.disabled = true;
+      refreshListBtn.disabled = true;
+      addMessage('❌ Verbindung getrennt', 'error');
+    });
+
+    socket.on('audio-list', (audioFiles) => {
+      allAudioFiles = audioFiles;
+      addMessage(`📂 ${audioFiles.length} Audio-Dateien empfangen`, 'success');
+      displayAudioList(audioFiles);
+    });
+
+    socket.on('audio-stream-start', (metadata) => {
+      streamMetadata = metadata;
+      addMessage(`🚀 Stream gestartet: ${metadata.fileName} (${formatFileSize(metadata.totalSize)})`, 'success');
+      updateStatus('Stream wird empfangen...');
+      updateProgress(0);
+      streamBuffer = [];
+      streamInfo.textContent = `Streaming: ${metadata.fileName} - 0/${metadata.totalSize} bytes`;
+      updateDebugInfo();
+    });
+
+    socket.on('audio-chunk', (chunk) => {
+      streamBuffer.push(chunk);
+      const progress = (chunk.chunkIndex + 1) / chunk.totalChunks * 100;
+      updateProgress(progress);
+
+      const receivedBytes = streamBuffer.reduce((sum, c) => sum + atob(c.data).length, 0);
+      streamInfo.textContent = `Streaming: ${streamMetadata.fileName} - ${formatFileSize(receivedBytes)}/${formatFileSize(streamMetadata.totalSize)} (${Math.round(progress)}%)`;
+
+      if (chunk.isLast) {
+        addMessage(`📦 Stream komplett empfangen: ${chunk.totalChunks} Chunks`, 'success');
+        assembleAudioFromChunks();
+      }
+    });
+
+    socket.on('audio-stream-end', (data) => {
+      addMessage(`🏁 Stream beendet: ${data.fileId} (${data.totalChunks} Chunks, ${formatFileSize(data.totalSize)})`, 'success');
+      updateStatus('Stream abgeschlossen');
+    });
+
+    socket.on('audio-error', (error) => {
+      addMessage(`❌ Server-Fehler: ${error.error} (${error.fileId})`, 'error');
+      if (error.details) {
+        addMessage(`📋 Details: ${error.details}`, 'error');
+      }
+      updateStatus('Server-Fehler');
+      updateProgress(0);
+    });
+  });
+
+  disconnectBtn.addEventListener('click', () => {
+    if (socket) socket.disconnect();
+  });
+
+  refreshListBtn.addEventListener('click', () => {
+    if (socket) {
+      addMessage('🔄 Audio-Liste wird aktualisiert...', 'info');
+      socket.emit('request-audio-list');
+    }
+  });
+
+  clearLogsBtn.addEventListener('click', () => {
+    messages.innerHTML = '';
+    addMessage('🧹 Logs gelöscht', 'info');
+  });
+
+  // Initialize
+  checkBrowserAudioSupport();
+  updateDebugInfo();
+</script>
+</body>
+</html>

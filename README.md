@@ -25,10 +25,17 @@ To see all available targets to run for a project, run:
 ```sh
 npx nx show project test-socket
 ```
-        
-These targets are either [inferred automatically](https://nx.dev/concepts/inferred-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) or defined in the `project.json` or `package.json` files.
 
-[More about running tasks in the docs &raquo;](https://nx.dev/features/run-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+## Manuelle API-Tests
+
+1. Starte den Dev-Server:
+   ```sh
+   npx nx serve test-socket
+   ```
+2. Öffne `http://localhost:3000/test-client` im Browser.
+3. Nutze die Widgets, um Requests gegen `/`, `/ping` oder `/echo` abzufeuern und Antworten direkt anzuzeigen.
+
+Der statische Client liegt unter `apps/test-socket/src/assets/test-client.html` und wird automatisch unter `/tester/` bereitgestellt, damit auch weitere Assets ausgeliefert werden können.
 
 ## Add new projects
 

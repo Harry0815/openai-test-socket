@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+  <title>WebRTC Audio Mesh Client</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 20px; max-width: 900px; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    input, button { font-size: 14px; padding: 8px 10px; }
+    button { cursor:pointer; }
+    .card { border:1px solid #ddd; border-radius:12px; padding:12px; margin-top:12px; }
+    .muted { opacity:.6; }
+    .pill { display:inline-block; padding:2px 8px; border-radius:999px; background:#f1f1f1; font-size:12px; margin-left:6px; }
+    #log { white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px; background:#0b0f14; color:#d7e1ea; padding:12px; border-radius:12px; max-height: 280px; overflow:auto; }
+    .audios audio { display:block; margin: 6px 0; width: 100%; }
+  </style>
+</head>
+<body>
+<h1>WebRTC Audio Mesh (2–10 Teilnehmer)</h1>
+
+<div class="card">
+  <div class="row">
+    <label>
+      WebSocket URL:
+      <input id="wsUrl" size="34" value="http://localhost:3000" />
+    </label>
+
+    <button id="btnJoin">Beitreten</button>
+    <button id="btnLeave" class="muted" disabled>Verlassen</button>
+
+    <button id="btnMute" class="muted" disabled>Mute</button>
+    <span id="status" class="pill">offline</span>
+    <span id="myId" class="pill">id: -</span>
+  </div>
+
+  <p class="muted" style="margin-top:10px">
+    Hinweis: Damit das Mikrofon funktioniert, nutze <b>https</b> oder <b>http://localhost</b>.
+  </p>
+</div>
+
+<div class="card">
+  <h3 style="margin:0 0 8px 0">Remote Audio Streams</h3>
+  <div class="audios" id="audios"></div>
+</div>
+
+<div class="card">
+  <h3 style="margin:0 0 8px 0">Log</h3>
+  <div id="log"></div>
+</div>
+
+<script>
+  (() => {
+    // ====== UI ======
+    const $ = (id) => document.getElementById(id);
+    const logEl = $("log");
+    const statusEl = $("status");
+    const myIdEl = $("myId");
+    const audiosEl = $("audios");
+
+    function log(...args) {
+      const line = args.map(a => typeof a === "string" ? a : JSON.stringify(a)).join(" ");
+      logEl.textContent += line + "\n";
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function setStatus(text) {
+      statusEl.textContent = text;
+    }
+
+    // ====== State ======
+    let ws = null;
+    let myId = null;
+    let localStream = null;
+    let muted = false;
+
+    /** peerId -> RTCPeerConnection */
+    const pcs = new Map();
+    /** peerId -> HTMLAudioElement */
+    const audioEls = new Map();
+
+    const rtcConfig = {
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun1.l.google.com:19302" }
+      ]
+    };
+
+    // ====== Helpers ======
+    function send(msg) {
+      console.log(msg);
+      console.log(ws);
+      if (!ws || !ws.connected)
+        return;
+      ws.send(JSON.stringify(msg));
+    }
+
+    function ensureAudioEl(peerId, stream) {
+      let el = audioEls.get(peerId);
+      if (!el) {
+        el = document.createElement("audio");
+        el.autoplay = true;
+        el.controls = true;
+        el.dataset.peerId = peerId;
+        el.title = `Peer ${peerId}`;
+        audiosEl.appendChild(el);
+        audioEls.set(peerId, el);
+      }
+      el.srcObject = stream;
+    }
+
+    function removePeer(peerId) {
+      const pc = pcs.get(peerId);
+      if (pc) {
+        try { pc.close(); } catch {}
+        pcs.delete(peerId);
+      }
+
+      const el = audioEls.get(peerId);
+      if (el) {
+        el.srcObject = null;
+        el.remove();
+        audioEls.delete(peerId);
+      }
+      log("peer entfernt:", peerId);
+    }
+
+    async function getMic() {
+      if (localStream) return localStream;
+
+      localStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
+
+      // initial mute state
+      for (const track of localStream.getAudioTracks()) {
+        track.enabled = !muted;
+      }
+
+      log("Mikrofon OK.");
+      return localStream;
+    }
+
+    function createPC(peerId) {
+      const pc = new RTCPeerConnection(rtcConfig);
+
+      // Local tracks
+      for (const track of localStream.getTracks()) {
+        pc.addTrack(track, localStream);
+      }
+
+      pc.onicecandidate = (e) => {
+        if (e.candidate) {
+          send({ type: "ice", to: peerId, from: myId, candidate: e.candidate });
+        }
+      };
+
+      pc.ontrack = (e) => {
+        console.log(e);
+        const [stream] = e.streams;
+        if (stream) ensureAudioEl(peerId, stream);
+      };
+
+      pc.onconnectionstatechange = () => {
+        log(`pc(${peerId}) state:`, pc.connectionState);
+        if (pc.connectionState === "failed" || pc.connectionState === "disconnected" || pc.connectionState === "closed") {
+          // optional cleanup
+        }
+      };
+
+      pcs.set(peerId, pc);
+      return pc;
+    }
+
+    async function callPeer(peerId) {
+      if (peerId === myId) return;
+      if (pcs.has(peerId)) return;
+
+      const pc = createPC(peerId);
+
+      const offer = await pc.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: false
+      });
+      await pc.setLocalDescription(offer);
+
+      send({ type: "offer", to: peerId, from: myId, offer: pc.localDescription });
+      log("offer ->", peerId);
+    }
+
+    async function handleOffer(msg) {
+      const peerId = msg.from;
+      let pc = pcs.get(peerId);
+      if (!pc) pc = createPC(peerId);
+
+      await pc.setRemoteDescription(msg.offer);
+
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+
+      send({ type: "answer", to: peerId, from: myId, answer: pc.localDescription });
+      log("answer ->", peerId);
+    }
+
+    async function handleAnswer(msg) {
+      const peerId = msg.from;
+      const pc = pcs.get(peerId);
+      if (!pc) return;
+      await pc.setRemoteDescription(msg.answer);
+      log("answer <-", peerId);
+    }
+
+    async function handleIce(msg) {
+      const peerId = msg.from;
+      const pc = pcs.get(peerId);
+      if (!pc) return;
+      try {
+        await pc.addIceCandidate(msg.candidate);
+      } catch (err) {
+        log("ICE add error:", err?.message || err);
+      }
+    }
+
+    // ====== Join/Leave ======
+    async function join() {
+      const wsUrl = $("wsUrl").value.trim();
+      if (!wsUrl) return;
+
+      $("btnJoin").disabled = true;
+
+      try {
+        await getMic();
+      } catch (err) {
+        log("Mikrofon Fehler:", err?.message || err);
+        $("btnJoin").disabled = false;
+        return;
+      }
+
+      ws = io(wsUrl, {
+        transports: ['websocket', 'polling'],
+        timeout: 5000,
+        forceNew: true
+      });
+
+      // ws = new WebSocket(wsUrl);
+
+      ws.on('connect', () => {
+        setStatus("ws connected");
+        log("WS connected:", wsUrl);
+        $("btnLeave").disabled = false;
+        $("btnMute").disabled = false;
+        $("btnMute").classList.remove("muted");
+        $("btnLeave").classList.remove("muted");
+
+        const id = ws.id;
+        myIdEl.textContent = "id: " + id;
+      });
+
+      ws.on('disconnect', () => {
+        setStatus("offline");
+        log("WS closed");
+        $("btnJoin").disabled = false;
+        $("btnLeave").disabled = true;
+        $("btnMute").disabled = true;
+        $("btnLeave").classList.add("muted");
+        $("btnMute").classList.add("muted");
+
+        // cleanup all peers
+        for (const peerId of pcs.keys()) removePeer(peerId);
+        pcs.clear();
+        myId = null;
+        myIdEl.textContent = "id: -";
+      });
+
+      ws.on('connect_error', (error) => {
+        log("WS error:", e?.message || e);
+      });
+
+      ws.on('message', async (error) => {
+        let msg;
+        try { msg = JSON.parse(e.data); } catch { return; }
+        console.log(msg);
+
+        // --- Expected server messages:
+        // welcome {id, peers:[...]}
+        // peer-joined {id}
+        // peer-left {id}
+        // offer/answer/ice forwarded with to/from
+        if (msg.type === "welcome") {
+          myId = msg.id;
+          myIdEl.textContent = "id: " + myId;
+          setStatus("joined");
+
+          log("welcome. peers:", msg.peers);
+
+          // Call existing peers
+          for (const peerId of msg.peers || []) {
+            await callPeer(peerId);
+          }
+        }
+
+        if (msg.type === "peer-joined") {
+          log("peer joined:", msg.id);
+          // Initiate connection to newcomer
+          await callPeer(msg.id);
+        }
+
+        if (msg.type === "peer-left") {
+          log("peer left:", msg.id);
+          removePeer(msg.id);
+        }
+
+        if (msg.type === "offer") await handleOffer(msg);
+        if (msg.type === "answer") await handleAnswer(msg);
+        if (msg.type === "ice") await handleIce(msg);
+      });
+    }
+
+    function leave() {
+      if (ws) {
+        try { ws.close(); } catch {}
+        ws = null;
+      }
+
+      for (const peerId of pcs.keys()) removePeer(peerId);
+      pcs.clear();
+
+      if (localStream) {
+        // optional: stop mic (then re-ask permission next join)
+        for (const t of localStream.getTracks()) t.stop();
+        localStream = null;
+      }
+
+      myId = null;
+      myIdEl.textContent = "id: -";
+      setStatus("offline");
+      $("btnJoin").disabled = false;
+      $("btnLeave").disabled = true;
+      $("btnMute").disabled = true;
+      $("btnLeave").classList.add("muted");
+      $("btnMute").classList.add("muted");
+      log("verlassen.");
+    }
+
+    function toggleMute() {
+      muted = !muted;
+      if (localStream) {
+        for (const track of localStream.getAudioTracks()) {
+          track.enabled = !muted;
+        }
+      }
+      $("btnMute").textContent = muted ? "Unmute" : "Mute";
+      log(muted ? "Muted" : "Unmuted");
+      send({ type: "mute", id: myId, muted });
+    }
+
+    // ====== Wire UI ======
+    $("btnJoin").addEventListener("click", join);
+    $("btnLeave").addEventListener("click", leave);
+    $("btnMute").addEventListener("click", toggleMute);
+
+    // initial state
+    $("btnMute").textContent = "Mute";
+    log("Bereit. WS URL eintragen und 'Beitreten' klicken.");
+  })();
+</script>
+</body>
+</html>
+
