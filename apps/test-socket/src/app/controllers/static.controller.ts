@@ -63,4 +63,18 @@ export class StaticController {
       res.status(404).send('Not found');
     }
   }
+
+
+  @Get('socket-stream-1.html')
+  serveSocketStream1(@Res() res: FastifyReply) {
+    const filePath = path.resolve(process.cwd(), 'apps/test-socket/src/assets/web-socket-stream-test-1.html');
+    console.log('Served web-socket-stream-test-1.html', filePath);
+    try {
+      const content = fs.readFileSync(filePath, 'utf8');
+      res.type('text/html').send(content);
+    } catch (error) {
+      console.error('Failed to serve web-socket-stream-test-1.html', error);
+      res.status(404).send('Not found');
+    }
+  }
 }

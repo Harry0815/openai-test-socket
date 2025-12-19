@@ -27,12 +27,14 @@ export class SocketioGateway implements OnGatewayConnection, OnGatewayDisconnect
   @WebSocketServer()
   server: Server;
 
+
   private readonly logger = new Logger(SocketioGateway.name);
   private readonly audioService: OwnAudioService = new OwnAudioService();
   private readonly audioRecordingService: AudioRecordingService = new AudioRecordingService();
   private readonly liveAudioService: SocketLiveAudioService = new SocketLiveAudioService();
 
   handleConnection(client: Socket) {
+
     this.logger.log(`Client connected: ${client.id}`);
     client.emit('welcome', { message: 'Willkommen! Verbindung hergestellt.' });
 

@@ -6,7 +6,9 @@ import {
 } from '@nestjs/platform-fastify';
 import { AppModule } from './app/app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { IoAdapter } from '@nestjs/platform-socket.io';
+// import { IoAdapter } from '@nestjs/platform-socket.io';
+import { WsAdapter } from '@nestjs/platform-ws';
+
 
 const host = process.env.HOST ?? 'localhost';
 const port = process.env.PORT ? Number(process.env.PORT) : 3000;
@@ -17,8 +19,9 @@ const bootstrap = async () => {
     new FastifyAdapter()
   );
 
-// Socket.io Adapter für Fastify konfigurieren
-  app.useWebSocketAdapter(new IoAdapter(app));
+  // Socket.io Adapter für Fastify konfigurieren
+  // app.useWebSocketAdapter(new IoAdapter(app));
+  app.useWebSocketAdapter(new WsAdapter(app));
 
   const config = new DocumentBuilder()
     .setTitle('chatbot-api')
@@ -41,7 +44,6 @@ const bootstrap = async () => {
 
   await app.listen(port, host);
   console.log(`🚀 chatbot-api is running at http://${host}:${port}`);
-  console.log(`🔌 Socket.io server is running on: ws://${host}:8081`);
 };
 
 bootstrap();
