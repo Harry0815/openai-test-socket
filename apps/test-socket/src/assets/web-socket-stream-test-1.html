@@ -85,8 +85,6 @@
   let reader;
   let writer;
 
-  let socket = null;
-
   let mediaRecorder = null;
   let audioContext = null;
   let analyser = null;
@@ -112,6 +110,7 @@
   const recordingsList = document.getElementById('recordingsList');
   const audioPlayer = document.getElementById('audioPlayer');
   const visualizer = document.getElementById('visualizer');
+  const wsURL = 'http://localhost:3000';
 
   let recordingTimeInterval = null;
   let totalDataSize = 0;
@@ -132,13 +131,43 @@
       return false;
     }
 
-    const wsURL = 'http://localhost:3000';
+
     wss = new WebSocketStream(wsURL);
     console.log('Socket opened to: ' + wss.url);
 
     const { readable, writable, extensions, protocol } = await wss.opened;
     reader = readable.getReader();
     writer = writable.getWriter();
+
+    await readLoop();
+  }
+
+  async function readLoop() {
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) {
+          addMessage('Stream vom Server geschlossen', 'info');
+          break;
+        }
+        handleServerMessage(value);
+      }
+    } catch (error) {
+      addMessage(`Fehler beim Lesen: ${error.message}`, 'error');
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
+  function handleServerMessage(data) {
+    try {
+      const parsed = JSON.parse(data);
+      if (parsed.type === 'response') {
+        addMessage(`Server sagt: ${parsed.data}`, 'info');
+      }
+    } catch (e) {
+      addMessage(`Server Nachricht: ${data}`, 'info');
+    }
   }
 
   function addMessage(message, type = 'info') {
@@ -210,16 +239,6 @@
     }
   }
 
-  function playRecording(filename) {
-    if (!wss || !wss.connected) {
-      addMessage('Nicht verbunden!', 'error');
-      return;
-    }
-
-    addMessage(`Streaming Aufnahme: ${filename}`, 'info');
-    socket.emit('stream-recording', { filename });
-  }
-
   async function startRecording() {
     try {
       console.log('Starte Aufnahme... 1');
@@ -265,7 +284,6 @@
 
       // Start server recording session
       console.log('Starte Aufnahme...');
-      // socket.emit('start-recording');
 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
@@ -273,14 +291,16 @@
           const reader = new FileReader();
           reader.onload = () => {
             const base64Data = reader.result.split(',')[1];
-            writer.write({
-              event: 'sound_data_from_client',
-              data: {
-                message: 'sound_data_from_client',
-                chunk: base64Data,
-                sequence: chunkSequence++
-              }
-            });
+            console.log('Send data to server...');
+            writer.write(JSON.stringify({
+                event: 'sound_data_from_client',
+                data: {
+                  mimeType: mimeType,
+                  message: 'sound_data_from_client',
+                  chunk: base64Data,
+                  sequence: chunkSequence++
+                }
+              }));
 
             totalDataSize += event.data.size;
             dataSize.textContent = formatFileSize(totalDataSize);
@@ -338,10 +358,6 @@
     stopRecordBtn.disabled = true;
     startRecordBtn.disabled = false;
 
-    // Stop server recording
-    if (currentSessionId) {
-      socket.emit('stop-recording', { sessionId: currentSessionId });
-    }
     addMessage('Aufnahme gestoppt, Verarbeitung läuft...', 'info');
   }
 

@@ -10,14 +10,11 @@ import {
 import { createWebSocketStream, Server, WebSocket } from 'ws';
 import { Logger } from '@nestjs/common';
 import { Duplex } from 'node:stream';
-import { z } from 'zod';
-
-const msgTypes = z.enum({
-  sound_data_from_client: 'sound_data_from_client',
-  sound_data_from_ai: 'sound_data_from_ai',
-  message: 'message',
-  broadcast: 'broadcast',
-});
+import {
+  MsgDataFromClient,
+  msgDataFromClientSchema,
+  msgTypes,
+} from '../models/msg.model';
 
 @WebSocketGateway({
   cors: {
@@ -45,9 +42,7 @@ export class OwnWebSocketGateway implements OnGatewayConnection, OnGatewayDiscon
       wss: wss,
     };
 
-    wss.on('data', (buffer) => {
-      this.logger.log(`Daten erhalten: ${buffer}`);
-    });
+    wss.on('data', () => { /* empty */ });
 
     this.clients.set(client, p);
     this.logger.log(`Client mit  createWebSocketStream connected`);
@@ -61,13 +56,15 @@ export class OwnWebSocketGateway implements OnGatewayConnection, OnGatewayDiscon
   }
 
   @SubscribeMessage(msgTypes.enum.sound_data_from_client)
-  handleSoundDataFromClient(@MessageBody() data: any, @ConnectedSocket() client: WebSocket): void {
-    this.logger.log(`Received message: ${JSON.stringify(data)}`);
+  handleSoundDataFromClient(@MessageBody() data: MsgDataFromClient, @ConnectedSocket() client: WebSocket): void {
+    msgDataFromClientSchema.parse(data);
+
+    this.logger.log(`Received message: ${data.message} ${data.sequence.toString()}, ${data.mimeType}`);
 
     // Echo die Nachricht zurück an den Client
     this.clients.get(client).wss.write(JSON.stringify({
       type: 'response',
-      data: `Echo: ${data.message || data}`,
+      data: `Echo: ${data.message}`,
       timestamp: new Date().toISOString()
     }));
   }
