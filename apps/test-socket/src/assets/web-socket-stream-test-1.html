@@ -92,7 +92,14 @@
   let isRecording = false;
   let currentSessionId = null;
   let recordingStartTime = null;
+
   let chunkSequence = 0;
+  let sourceBuffer;
+  let mediaSource;
+  let queue = [];
+  const queueLimit = 1;
+  let isStarted = false;
+  let mimeType = 'audio/webm';
 
   // DOM Elements
   const status = document.getElementById('status');
@@ -150,7 +157,8 @@
           addMessage('Stream vom Server geschlossen', 'info');
           break;
         }
-        handleServerMessage(value);
+        console.log('Server Nachricht:');
+        await handleServerMessage(value);
       }
     } catch (error) {
       addMessage(`Fehler beim Lesen: ${error.message}`, 'error');
@@ -159,15 +167,99 @@
     }
   }
 
-  function handleServerMessage(data) {
+  async function handleServerMessage(data) {
     try {
       const parsed = JSON.parse(data);
+      console.log('Server Nachricht:', parsed);
       if (parsed.type === 'response') {
         addMessage(`Server sagt: ${parsed.data}`, 'info');
+      }
+      if (parsed.type === 'play-data') {
+        // const audioData = typeof parsed.data === 'string'
+        //   ? Uint8Array.from(atob(parsed.data), c => c.charCodeAt(0))
+        //   : new Uint8Array(parsed.data);
+
+        const audioData = new Uint8Array(parsed.data.data);
+
+        if (sourceBuffer) {
+          console.log('Audio-Daten empfangen', audioData.length);
+          queue.push(audioData);
+          processQueue();
+        }
       }
     } catch (e) {
       addMessage(`Server Nachricht: ${data}`, 'info');
     }
+  }
+
+  function processQueue() {
+    if (sourceBuffer && !sourceBuffer.updating && queue.length > queueLimit) {
+      console.log('processQueue')
+      try {
+        const chunk = queue.shift();
+        sourceBuffer.appendBuffer(chunk);
+
+        // Wenn wir genug im Puffer haben, starte die Wiedergabe
+        if (!isStarted && queue.length >= queueLimit) {
+          console.log('Starte Wiedergabe...');
+          const playPromise = audioPlayer.play();
+          if (playPromise !== undefined) {
+            playPromise.then(() => {
+              audioPlayer.playbackRate = 0.5;
+              isStarted = true;
+              addMessage('Wiedergabe gestartet', 'success');
+            }).catch(e => {
+              addMessage('Wiedergabe-Fehler: ' + e.message, 'error');
+              // Falls es doch blockiert wurde, versuchen wir es beim nächsten Chunk erneut
+              isStarted = false;
+            });
+          }
+        }
+      } catch (e) {        console.error("Fehler beim Hinzufügen zum Buffer:", e);
+      }
+    }
+  }
+
+  function prepareSound() {
+    // Falls bereits eine MediaSource existiert, aufräumen
+    if (mediaSource) {
+      if (mediaSource.readyState === 'open') {
+        try {
+          mediaSource.endOfStream();
+        } catch (e) {
+          console.log("Fehler beim Schließen der MediaSource:", e);
+        }
+      }
+      URL.revokeObjectURL(audioPlayer.src);
+      sourceBuffer = null;
+    }
+
+    mediaSource = new MediaSource();
+    audioPlayer.src = URL.createObjectURL(mediaSource);
+    isStarted = false;
+    queue = []; // Queue leeren für Neustart
+
+    mediaSource.addEventListener('sourceopen', () => {
+      // Sicherstellen, dass wir nicht doppelt adden
+      if (mediaSource.sourceBuffers.length > 0) return;
+
+      // const mimeType = 'audio/webm; codecs="opus"';
+      // const mimeType = 'audio/pcm';
+      try {
+        sourceBuffer = mediaSource.addSourceBuffer('audio/webm; codecs="opus"');
+        sourceBuffer.mode = 'sequence';
+
+        sourceBuffer.addEventListener('updateend', () => {
+          if (queue.length > 0 && !sourceBuffer.updating) {
+            sourceBuffer.appendBuffer(queue.shift());
+          }
+        });
+
+        addMessage('Audio Player bereit für neuen Stream', 'success');
+      } catch (e) {
+        addMessage(`Fehler beim Erstellen des SourceBuffers: ${e.message}`, 'error');
+      }
+    });
   }
 
   function addMessage(message, type = 'info') {
@@ -178,7 +270,7 @@
     div.style.marginBottom = '5px';
     messages.appendChild(div);
     messages.scrollTop = messages.scrollHeight;
-    console.log(`[${type.toUpperCase()}] ${message}`);
+    // console.log(`[${type.toUpperCase()}] ${message}`);
   }
 
   function updateRecordingStatus(statusClass, statusText) {
@@ -246,10 +338,11 @@
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
-          noiseSuppression: true,
+          noiseSuppression: false,
           autoGainControl: true,
-          sampleRate: 44100,
-          channelCount: 1
+          sampleRate: 24000,
+          channelCount: 1,
+          sampleSize: 8
         }
       });
       console.log('Starte Aufnahme... 2');
@@ -262,7 +355,7 @@
       analyser.fftSize = 256;
 
       // Try different MIME types for better compatibility
-      let mimeType = 'audio/webm;codecs=opus';
+      // let mimeType = 'audio/webm;codecs=opus';
       if (!MediaRecorder.isTypeSupported(mimeType)) {
         mimeType = 'audio/webm';
         if (!MediaRecorder.isTypeSupported(mimeType)) {
@@ -272,15 +365,16 @@
           }
         }
       }
+      // mimeType = 'audio/webm';
 
       addMessage(`Using MIME type: ${mimeType}`, 'info');
 
       // Setup MediaRecorder
       mediaRecorder = new MediaRecorder(stream, {
         mimeType: mimeType,
-        audioBitsPerSecond: 128000
+        audioBitsPerSecond: 24000
       });
-      console.log('Starte Aufnahme... 3');
+      console.log('Starte Aufnahme... 3', mediaRecorder.mimeType);
 
       // Start server recording session
       console.log('Starte Aufnahme...');
@@ -309,7 +403,7 @@
         }
       };
 
-      mediaRecorder.start(250); // Record in smaller chunks (250ms) for better streaming
+      mediaRecorder.start(1000); // Record in smaller chunks (250ms) for better streaming
       isRecording = true;
       recordingStartTime = Date.now();
       totalDataSize = 0;
@@ -325,6 +419,8 @@
         const elapsed = (Date.now() - recordingStartTime) / 1000;
         recordingTime.textContent = formatTime(elapsed);
       }, 1000);
+
+      prepareSound();
 
       // Start visualization
       setupAudioVisualization();
@@ -368,6 +464,8 @@
     startRecordBtn.disabled = false;
     connectBtn.disabled = true;
     disconnectBtn.disabled = false;
+    status.textContent = 'Verbunden';
+    status.className = 'connected';
   });
 
   disconnectBtn.addEventListener('click', () => {
