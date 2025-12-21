@@ -117,6 +117,24 @@ export class OpenAIRealtimeSocketHandler {
   /** Send the session.create message required by the OpenAI realtime endpoint. */
   private sendSessionCreate() {
     const event = {
+      "type": "session.update",
+      "session": {
+        "type": "realtime",
+        "model": "gpt-realtime",
+        "instructions": "Du bist ein Simultanübersetzer. Übersetze fortlaufend von Deutsch nach Englisch. Antworte ausschließlich mit der Übersetzung, keine Kommentare.",
+        "audio": {
+          "input": {
+            "format": { "type": "audio/pcm", "rate": 24000 },
+            "turn_detection": { "type": "server_vad", "threshold": 0.5, "prefix_padding_ms": 200, "silence_duration_ms": 250 }
+          },
+          "output": {
+            "voice": "marin"
+          }
+        }
+      }
+    };
+    /*
+    const event = {
       type: "session.update",
       session: {
         type: "realtime",
@@ -144,7 +162,7 @@ export class OpenAIRealtimeSocketHandler {
         },
         instructions: "Speak clearly and briefly. Confirm understanding before taking actions."
       },
-    };
+    };*/
     this.ws.send(JSON.stringify(event));
   }
 
