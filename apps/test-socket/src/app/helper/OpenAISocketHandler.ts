@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import WebSocket from 'ws';
+import { Logger } from '@nestjs/common';
 
 // Lightweight interface describing the subset of the WS API this class uses.
 export interface IWebSocket {
@@ -41,6 +42,10 @@ export class OpenAIRealtimeSocketHandler {
   private options: Required<RealtimeSessionOptions>;
   private awaitingResponse = false;
   private readyPromise: Promise<void> | null = null;
+  private readonly logger = new Logger(OpenAIRealtimeSocketHandler.name);
+  private connectStartedAt = 0;
+  private pendingInputChunks: Array<{ sentAt: number; size: number }> = [];
+  private lastAudioDeltaAt = 0;
 
   constructor(opts?: RealtimeSessionOptions) {
     this.options = {
@@ -56,6 +61,7 @@ export class OpenAIRealtimeSocketHandler {
   }
 
   connectToAudioStream(): Promise<void> {
+    this.connectStartedAt = Date.now();
     const rawWs = new WebSocket(`wss://api.openai.com/v1/realtime?model=gpt-realtime`, {
       headers: {
         Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
@@ -110,12 +116,15 @@ export class OpenAIRealtimeSocketHandler {
   }
 
   private handleOpen() {
+    const handshakeDuration = Date.now() - this.connectStartedAt;
+    this.logger.debug(`[latency] OpenAI websocket open after ${handshakeDuration} ms`);
     console.log('OpenAI Realtime WebSocket connection opened.');
     this.sendSessionCreate();
   }
 
   /** Send the session.create message required by the OpenAI realtime endpoint. */
   private sendSessionCreate() {
+    this.logger.debug('Sending session.update to OpenAI Realtime');
     const event = {
       "type": "session.update",
       "session": {
@@ -170,6 +179,7 @@ export class OpenAIRealtimeSocketHandler {
   public requestResponse(extraInstructions?: string) {
     const instructions = extraInstructions ?? this.options.instructions ?? 'Translate the incoming speech to fluent English and keep the same tone.';
     this.awaitingResponse = true;
+    this.logger.debug('response.create requested from OpenAI');
     this.ws.send(JSON.stringify({
       type: 'response.create',
       response: {
@@ -237,6 +247,14 @@ export class OpenAIRealtimeSocketHandler {
             sampleRate: 24000,
             responseId: msg.response_id,
           };
+          const pending = this.pendingInputChunks.shift();
+          if (pending) {
+            const latency = Date.now() - pending.sentAt;
+            this.logger.debug(`[latency] OpenAI process ${latency} ms for ${pending.size} bytes -> audio delta (${payload.base64.length} b64 chars)`);
+          } else {
+            this.logger.debug('[latency] Audio delta without pending input telemetry');
+          }
+          this.lastAudioDeltaAt = Date.now();
           this.events.emit('audio.output', payload);
         }
         break;
@@ -278,6 +296,12 @@ export class OpenAIRealtimeSocketHandler {
   }
 
   public sendAudioChunk(buffer: Buffer) {
+    const now = Date.now();
+    if (!this.lastAudioDeltaAt) {
+      this.lastAudioDeltaAt = now;
+    }
+    this.pendingInputChunks.push({ sentAt: now, size: buffer.length });
+    this.logger.debug(`[latency] queued chunk ${this.pendingInputChunks.length} (${buffer.length} bytes)`);
     console.log('Sending audio chunk to OpenAI Realtime WebSocket...');
     this.ws.send(JSON.stringify({
       type: 'input_audio_buffer.append',
@@ -286,6 +310,7 @@ export class OpenAIRealtimeSocketHandler {
   }
 
   public commitAudio() {
+    this.logger.debug('input_audio_buffer.commit sent to OpenAI');
     this.ws.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
   }
 

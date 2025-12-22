@@ -37,6 +37,8 @@ export class OwnWebSocketGateway implements OnGatewayConnection, OnGatewayDiscon
     openAIHandler?: OpenAIRealtimeSocketHandler,
     audioConverter?: PassThrough,
     audioConverterReverse?: PassThrough,
+    pendingInputChunks: Array<{ sequence: number; receivedAt: number }>,
+    pendingAIChunks: Array<{ receivedAt: number }>,
   }>();
 
   @WebSocketServer()
@@ -53,6 +55,8 @@ export class OwnWebSocketGateway implements OnGatewayConnection, OnGatewayDiscon
 
     const inputStream = new PassThrough();
     const inputStreamReverse = new PassThrough();
+    const pendingInputChunks: Array<{ sequence: number; receivedAt: number }> = [];
+    const pendingAIChunks: Array<{ receivedAt: number }> = [];
 
     // FFmpeg Konfiguration: WebM -> PCM16 (S16LE, 16kHz, Mono)
     const ffmpegProcess = ffmpeg(inputStream)
@@ -68,8 +72,9 @@ export class OwnWebSocketGateway implements OnGatewayConnection, OnGatewayDiscon
 
     const ffmpegProcessReverse = ffmpeg(inputStreamReverse)
       .inputFormat('s16le')
-      // .audioBitrate(16)
+      .audioBitrate(16)
       .audioFrequency(24000) // MUSS exakt 24000 sein, wenn OpenAI 24kHz liefert
+      .audioBitrate(8)
       .audioChannels(1)
       .audioCodec('libopus')
       .format('webm')
@@ -77,8 +82,8 @@ export class OwnWebSocketGateway implements OnGatewayConnection, OnGatewayDiscon
         '-deadline realtime',     // WICHTIG für niedrige Latenz
         '-preset ultrafast',
         '-content_type audio/webm',
-        '-cluster_size_limit 2M',
-        '-cluster_time_limit 5100',
+        '-cluster_size_limit 1M',
+        '-cluster_time_limit 500',
         '-dash 1'
       ])
       .on('error', (err) => this.logger.error('Output FFmpeg Error: ' + err.message));
@@ -87,6 +92,13 @@ export class OwnWebSocketGateway implements OnGatewayConnection, OnGatewayDiscon
 
     // Die konvertierten PCM-Daten an OpenAI senden
     outputStream.on('data', (pcmChunk: Buffer) => {
+      const telemetry = pendingInputChunks.shift();
+      if (telemetry) {
+        const latency = Date.now() - telemetry.receivedAt;
+        this.logger.debug(`[latency] seq ${telemetry.sequence}: client→OpenAI ${latency} ms (${pcmChunk.length} bytes)`);
+      } else {
+        this.logger.debug('[latency] PCM chunk without pending telemetry entry');
+      }
       if (openAIHandler) {
         this.logger.log(`Sending chunk to OpenAI: ${pcmChunk.length} bytes`);
         openAIHandler.sendAudioChunk(pcmChunk);
@@ -95,6 +107,11 @@ export class OwnWebSocketGateway implements OnGatewayConnection, OnGatewayDiscon
 
     // Die konvertierten PCM-Daten an OpenAI senden
     outputStreamReverse.on('data', (pcmChunk: Buffer) => {
+      const telemetry = pendingAIChunks.shift();
+      if (telemetry) {
+        const latency = Date.now() - telemetry.receivedAt;
+        this.logger.debug(`[latency] AI→client encode ${latency} ms (${pcmChunk.length} bytes)`);
+      }
       this.logger.log(`Sending chunk to client: ${pcmChunk.length} bytes`);
       wss.write(JSON.stringify({
         type: 'play-data', // Das Frontend erwartet diesen Typ
@@ -113,10 +130,13 @@ export class OwnWebSocketGateway implements OnGatewayConnection, OnGatewayDiscon
       openAIHandler: openAIHandler,
       audioConverter: inputStream,
       audioConverterReverse: inputStreamReverse,
+      pendingInputChunks,
+      pendingAIChunks,
     };
 
     // Event-Listener für Audio-Antworten von OpenAI
     openAIHandler.events.on('audio.output', (payload) => {
+      pendingAIChunks.push({ receivedAt: Date.now() });
       this.logger.log(`Sending AI translation chunk to client`);
       inputStreamReverse.write(Buffer.from(payload.base64, 'base64'));
       // wss.write(JSON.stringify({
@@ -157,9 +177,10 @@ export class OwnWebSocketGateway implements OnGatewayConnection, OnGatewayDiscon
     this.logger.log(`Received message: ${data.message} ${data.sequence.toString()}, ${data.mimeType}, ${data.chunk.length} bytes`);
 
     if (clientData?.audioConverter) {
-      // Den Base64 WebM Chunk dekodieren und in den FFmpeg Konverter schreiben
       const buffer = Buffer.from(data.chunk, 'base64');
       clientData.audioConverter.write(buffer);
+      clientData.pendingInputChunks.push({ sequence: data.sequence, receivedAt: Date.now() });
+      this.logger.debug(`[latency] seq ${data.sequence}: chunk queued for FFmpeg (${buffer.length} bytes)`);
     }
 
     // if (clientData?.openAIHandler) {
