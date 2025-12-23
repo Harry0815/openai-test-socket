@@ -67,6 +67,19 @@ button:disabled {
   color: #404040;
 }
 
+.badge-warn {
+  background: #fef3c7;
+  border-color: #f59e0b;
+  color: #92400e;
+}
+
+.badges {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
 .meter {
   position: relative;
   background: #f3f4f6;

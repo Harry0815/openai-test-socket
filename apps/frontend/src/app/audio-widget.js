@@ -11,6 +11,8 @@ export class AudioWidget {
     this.root = root;
     this.config = { ...defaultConfig, ...config };
     this.statusLog = [];
+    this.connectionState = 'getrennt';
+    this.streamingState = false;
 
     this.streamService = new AudioStreamService({
       onLevel: this._updateLevel.bind(this),
@@ -22,15 +24,25 @@ export class AudioWidget {
       url: this.config.transportUrl,
       onBinary: (data) => this.streamService.playAudioChunk(data),
       onStatus: (msg) => this._logStatus(`Transport: ${msg}`),
+      onConnectionChange: (state) => this._setConnectionState(state),
+      onStreamingChange: (active) => this._setStreamingState(active),
+      onFallback: (reason) => this._showFallback(reason),
+      onError: (err) => this._logStatus(`Fehler: ${err}`),
     });
 
     this._render();
   }
 
   async start() {
-    await this.transport.connect();
-    await this.streamService.startCapture({ encoder: this.encoderSelect.value });
-    this._setRunning(true);
+    this._resetFallbackBadge();
+    try {
+      await this.transport.connect();
+      await this.streamService.startCapture({ encoder: this.encoderSelect.value });
+      this._setRunning(true);
+    } catch (err) {
+      this._logStatus(`Start fehlgeschlagen: ${err.message || err}`);
+      this._setRunning(false);
+    }
   }
 
   async stop() {
@@ -61,6 +73,34 @@ export class AudioWidget {
     this.stopButton.disabled = !running;
     this.statusBadge.textContent = running ? 'läuft' : 'bereit';
     this.statusBadge.className = running ? 'badge badge-live' : 'badge badge-idle';
+    this.streamingBadge.textContent = this.streamingState ? 'Streaming' : 'wartet';
+    this.streamingBadge.className = this.streamingState ? 'badge badge-live' : 'badge badge-idle';
+  }
+
+  _setConnectionState(state) {
+    this.connectionState = state;
+    const isConnected = state === 'verbunden';
+    this.connectionBadge.textContent = isConnected ? 'verbunden' : 'getrennt';
+    this.connectionBadge.className = isConnected ? 'badge badge-live' : 'badge badge-idle';
+  }
+
+  _setStreamingState(active) {
+    this.streamingState = active;
+    this.streamingBadge.textContent = active ? 'Streaming' : 'wartet';
+    this.streamingBadge.className = active ? 'badge badge-live' : 'badge badge-idle';
+  }
+
+  _showFallback(reason) {
+    this.fallbackBadge.textContent = 'Fallback aktiv';
+    this.fallbackBadge.className = 'badge badge-warn';
+    if (reason) {
+      this._logStatus(`Fallback: ${reason}`);
+    }
+  }
+
+  _resetFallbackBadge() {
+    this.fallbackBadge.textContent = 'keine Fallbacks';
+    this.fallbackBadge.className = 'badge badge-idle';
   }
 
   _render() {
@@ -82,6 +122,11 @@ export class AudioWidget {
         <div class="meter-bar" data-ref="bar"></div>
         <span class="meter-text" data-ref="level">– dB</span>
       </div>
+      <div class="badges">
+        <span class="badge badge-idle" data-ref="connection">getrennt</span>
+        <span class="badge badge-idle" data-ref="stream">wartet</span>
+        <span class="badge" data-ref="fallback">keine Fallbacks</span>
+      </div>
       <pre class="status-box" data-ref="log"></pre>
     `;
 
@@ -92,6 +137,9 @@ export class AudioWidget {
     this.levelText = this.root.querySelector('[data-ref="level"]');
     this.statusBox = this.root.querySelector('[data-ref="log"]');
     this.statusBadge = this.root.querySelector('[data-ref="status"]');
+    this.connectionBadge = this.root.querySelector('[data-ref="connection"]');
+    this.streamingBadge = this.root.querySelector('[data-ref="stream"]');
+    this.fallbackBadge = this.root.querySelector('[data-ref="fallback"]');
 
     this.startButton.addEventListener('click', () => this.start());
     this.stopButton.addEventListener('click', () => this.stop());
