@@ -12,6 +12,7 @@ import { AudioRecordingService } from './services/recording.service';
 import { SocketLiveAudioService } from './services/live-audio.service';
 // import { OwnWebSocketGateway } from './gateway/websocket.gateway';
 import { SocketIoZweiGateway } from './gateway/socket-io-zwei.gateway';
+import { RealtimeGateway } from './gateway/realtime.gateway';
 
 @Module({
   imports: [ ],
@@ -30,7 +31,8 @@ import { SocketIoZweiGateway } from './gateway/socket-io-zwei.gateway';
     // SocketioGateway,
     // OwnWebSocketGateway,
     SocketIoZweiGateway,
-    SocketLiveAudioService
+    SocketLiveAudioService,
+    RealtimeGateway
   ],
 })
 export class AppModule {}
