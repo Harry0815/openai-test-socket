@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Live Audio Demo</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Live Audio Capture &amp; TTS</h1>
+      <p>
+        Dieses kleine UI-Widget greift per <code>getUserMedia</code> auf dein Mikrofon zu,
+        streamt PCM oder Opus über WebSocket zum Backend und spielt eingehende Audio-Chunks
+        über <code>AudioContext</code> wieder ab.
+      </p>
+      <div id="audio-widget"></div>
+    </main>
+    <script type="module">
+      import { mountAudioWidget } from './audio-widget.js';
+      mountAudioWidget('#audio-widget', {
+        transportUrl: 'ws://localhost:3000/ws',
+      });
+    </script>
+  </body>
+</html>
