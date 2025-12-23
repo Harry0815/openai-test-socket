@@ -30,7 +30,7 @@ import { RealtimeGateway } from './gateway/realtime.gateway';
     AudioRecordingService,
     // SocketioGateway,
     // OwnWebSocketGateway,
-    SocketIoZweiGateway,
+    // SocketIoZweiGateway,
     SocketLiveAudioService,
     RealtimeGateway
   ],

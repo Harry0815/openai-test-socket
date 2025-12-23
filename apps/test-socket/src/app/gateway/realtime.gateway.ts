@@ -37,9 +37,9 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   async handleConnection(client: WebSocket, ...args: [IncomingMessage]): Promise<void> {
     const request = args?.[0];
     if (!this.isAuthorized(request)) {
-      this.logger.warn('Unauthorized WebSocket connection attempt rejected');
-      client.close(4401, 'unauthorized');
-      return;
+      // this.logger.warn('Unauthorized WebSocket connection attempt rejected');
+      // client.close(4401, 'unauthorized');
+      // return;
     }
 
     const openAIHandler = new OpenAIRealtimeSocketHandler({
@@ -47,6 +47,20 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
       inputSampleRate: 24_000,
       outputSampleRate: 24_000,
     });
+    try {
+      await openAIHandler.connectToAudioStream();
+      this.logger.log('Client connected to realtime gateway');
+      client.send(
+        JSON.stringify({
+          type: 'ready',
+          rateLimit: { bytes: RATE_LIMIT_BYTES, windowMs: RATE_LIMIT_WINDOW_MS },
+        }),
+      );
+    } catch (err) {
+      this.logger.error('Failed to initialize OpenAI Realtime session', err as Error);
+      client.send(JSON.stringify({ type: 'error', reason: 'upstream_unavailable' }));
+      client.close(1011, 'upstream unavailable');
+    }
 
     this.sessions.set(client, {
       openAI: openAIHandler,
@@ -60,19 +74,6 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
 
     client.on('message', (data) => this.handleClientMessage(client, data));
 
-    try {
-      await openAIHandler.connectToAudioStream();
-      client.send(
-        JSON.stringify({
-          type: 'ready',
-          rateLimit: { bytes: RATE_LIMIT_BYTES, windowMs: RATE_LIMIT_WINDOW_MS },
-        }),
-      );
-    } catch (err) {
-      this.logger.error('Failed to initialize OpenAI Realtime session', err as Error);
-      client.send(JSON.stringify({ type: 'error', reason: 'upstream_unavailable' }));
-      client.close(1011, 'upstream unavailable');
-    }
   }
 
   handleDisconnect(client: WebSocket): void {
@@ -82,18 +83,21 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     this.logger.log('Client disconnected from realtime gateway');
   }
 
-  private handleClientMessage(client: WebSocket, rawData: WebSocket.RawData): void {
+  private handleClientMessage(client: WebSocket, rawData: any): void {    // WebSocket.RawData
     const session = this.sessions.get(client);
-    if (!session?.authenticated) {
-      client.close(4401, 'unauthorized');
-      return;
-    }
-
+    // if (!session?.authenticated) {
+    //   client.close(4401, 'unauthorized');
+    //   return;
+    // }
     let message: any;
     try {
       const text = typeof rawData === 'string' ? rawData : rawData.toString();
       message = JSON.parse(text);
     } catch {
+      this.logger.warn(
+        'Please ensure that your client is sending valid JSON payloads. See https://docs.openai.com/docs/guides/realtime-api/overview for more details.',
+      )
+      this.logger.warn('Invalid payload received from client:', typeof rawData === 'string' ? rawData : rawData.toString());
       client.send(JSON.stringify({ type: 'error', reason: 'invalid_payload' }));
       return;
     }
@@ -108,6 +112,11 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
       case 'response.request':
         session.openAI.requestResponse(message.instructions);
         break;
+      case 'audio':
+      case undefined:
+        this.logger.warn('Receive chunk Data');
+        this.forwardAudioChunk(client, session, message);
+        break;
       default:
         client.send(JSON.stringify({ type: 'error', reason: 'unknown_message_type' }));
     }
@@ -119,19 +128,22 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
       return;
     }
 
-    const buffer = Buffer.from(message.data, 'base64');
+    // const buffer = Buffer.from(message.data, 'base64');
+    const buffer = message.data;
     if (!this.enforceRateLimit(client, session, buffer.length)) {
       return;
     }
 
-    session.openAI.sendAudioChunk(buffer);
+    const bufferArray = Buffer.from(buffer, 'base64');
+    // const uint8Array = new Uint8Array(bufferArray.buffer, bufferArray.byteOffset, bufferArray.byteLength);
+
+    session.openAI.sendAudioChunk(bufferArray);
   }
 
   private forwardTts(client: WebSocket, payload: AudioDeltaPayload): void {
     if (client.readyState !== client.OPEN) {
       return;
     }
-
     const body = {
       type: 'tts-chunk',
       data: payload.base64,
