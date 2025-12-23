@@ -186,9 +186,9 @@ export class OpenAIRealtimeSocketHandler {
         instructions,
         modalities: ['text', 'audio'],
         audio: {
+          voice: "marin",
           format: 'pcm16',
-          voice: this.options.voice,
-          sample_rate: 24000,
+          // sample_rate: 16000,
         },
       },
     }));
@@ -235,16 +235,20 @@ export class OpenAIRealtimeSocketHandler {
       this.events.emit('raw', msg);
       return;
     }
-
     // 4. Event Dispatching basierend auf dem OpenAI Message-Typ
     console.log('OpenAI Realtime Message:', msg.type);
     switch (msg.type) {
+      case 'response.output_audio.done':
+        // this.markResponseComplete();
+        console.log('OpenAI Realtime Response Complete!', msg);
+        this.events.emit('response.output_audio.done', msg);
+        break;
       case 'response.output_audio.delta':
         if (msg.delta) {
           const payload: AudioDeltaPayload = {
             base64: msg.delta,
             format: 'pcm16',
-            sampleRate: 24000,
+            sampleRate: 16000,
             responseId: msg.response_id,
           };
           const pending = this.pendingInputChunks.shift();
@@ -274,7 +278,7 @@ export class OpenAIRealtimeSocketHandler {
         break;
 
       case 'response.completed':
-        this.markResponseComplete();
+        // this.markResponseComplete();
         this.events.emit('response.complete', msg);
         break;
 

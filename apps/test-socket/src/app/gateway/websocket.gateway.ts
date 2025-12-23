@@ -19,6 +19,8 @@ import { OpenAIRealtimeSocketHandler } from '../helper/OpenAISocketHandler';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import { PassThrough } from 'node:stream';
+import * as fs from 'node:fs';
+import { WriteStream } from 'node:fs';
 
 // Setze den Pfad zur ffmpeg Binärdatei
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
@@ -39,6 +41,10 @@ export class OwnWebSocketGateway implements OnGatewayConnection, OnGatewayDiscon
     audioConverterReverse?: PassThrough,
     pendingInputChunks: Array<{ sequence: number; receivedAt: number }>,
     pendingAIChunks: Array<{ receivedAt: number }>,
+    audioFileStream: WriteStream,
+    audioFileName?: string,
+    inputFileStream: WriteStream,
+    inputFileName?: string,
   }>();
 
   @WebSocketServer()
@@ -47,6 +53,11 @@ export class OwnWebSocketGateway implements OnGatewayConnection, OnGatewayDiscon
   private readonly logger = new Logger(OwnWebSocketGateway.name);
 
   async handleConnection(client: WebSocket, ...args: never[]) {
+    const sessionId = Date.now();
+    const audioFileName = `./output_${sessionId}.pcm`;
+    const audioFileStream = fs.createWriteStream(audioFileName);
+    const inputFileName = `./input_${sessionId}.webm`;
+    const inputFileStream = fs.createWriteStream(inputFileName);
 
     // Initialisiere OpenAI Handler für diesen Client
     const openAIHandler = new OpenAIRealtimeSocketHandler({
@@ -72,20 +83,19 @@ export class OwnWebSocketGateway implements OnGatewayConnection, OnGatewayDiscon
 
     const ffmpegProcessReverse = ffmpeg(inputStreamReverse)
       .inputFormat('s16le')
-      .audioBitrate(16)
-      .audioFrequency(24000) // MUSS exakt 24000 sein, wenn OpenAI 24kHz liefert
-      .audioBitrate(8)
-      .audioChannels(1)
-      .audioCodec('libopus')
+      // .audioFrequency(24000) // MUSS exakt 24000 sein, wenn OpenAI 24kHz liefert
+      // .audioBitrate(8)
+      // .audioChannels(1)
+      // .audioCodec('libopus')
       .format('webm')
-      .outputOptions([
-        '-deadline realtime',     // WICHTIG für niedrige Latenz
-        '-preset ultrafast',
-        '-content_type audio/webm',
-        '-cluster_size_limit 1M',
-        '-cluster_time_limit 500',
-        '-dash 1'
-      ])
+      // .outputOptions([
+      //   '-deadline realtime',     // WICHTIG für niedrige Latenz
+      //   '-preset ultrafast',
+      //   '-content_type audio/webm',
+      //   '-cluster_size_limit 1M',
+      //   '-cluster_time_limit 500',
+      //   '-dash 1'
+      // ])
       .on('error', (err) => this.logger.error('Output FFmpeg Error: ' + err.message));
 
     const outputStreamReverse = ffmpegProcessReverse.pipe();
@@ -100,7 +110,8 @@ export class OwnWebSocketGateway implements OnGatewayConnection, OnGatewayDiscon
         this.logger.debug('[latency] PCM chunk without pending telemetry entry');
       }
       if (openAIHandler) {
-        this.logger.log(`Sending chunk to OpenAI: ${pcmChunk.length} bytes`);
+        this.logger.log(`Sending chunk to OpenAI: ${pcmChunk.length} bytes`)
+
         openAIHandler.sendAudioChunk(pcmChunk);
       }
     });
@@ -132,12 +143,22 @@ export class OwnWebSocketGateway implements OnGatewayConnection, OnGatewayDiscon
       audioConverterReverse: inputStreamReverse,
       pendingInputChunks,
       pendingAIChunks,
+      audioFileStream,
+      audioFileName,
+      inputFileName,
+      inputFileStream
     };
 
     // Event-Listener für Audio-Antworten von OpenAI
     openAIHandler.events.on('audio.output', (payload) => {
       pendingAIChunks.push({ receivedAt: Date.now() });
       this.logger.log(`Sending AI translation chunk to client`);
+
+      const audioBuffer = Buffer.from(payload.base64, 'base64');
+
+      // In die Datei schreiben
+      audioFileStream.write(audioBuffer);
+
       inputStreamReverse.write(Buffer.from(payload.base64, 'base64'));
       // wss.write(JSON.stringify({
       //   type: 'play-data', // Das Frontend erwartet diesen Typ
@@ -165,6 +186,36 @@ export class OwnWebSocketGateway implements OnGatewayConnection, OnGatewayDiscon
   }
 
   async handleDisconnect(client: WebSocket) {
+    const clientData = this.clients.get(client);
+    // Falls du den Stream im clientData Objekt speicherst (empfohlen), schließe ihn hier:
+    clientData.audioFileStream?.end();
+
+    const pcmFile = clientData.audioFileName || './output.pcm';
+    const mp3File = pcmFile.replace('.pcm', '.mp3');
+
+    ffmpeg(pcmFile)
+      .inputFormat('s16le')
+      .audioFrequency(48000)
+      .audioChannels(1)
+      .save(mp3File)
+      .on('end', () => {
+        this.logger.log('Umwandlung in MP3 abgeschlossen');
+        // Optional: fs.unlinkSync(pcmFile); // Lösche die temporäre PCM Datei
+      });
+
+    const inputFile = clientData.inputFileName || './input.webm';
+    const inputMp3File = inputFile.replace('.webm', '.mp3');
+
+    ffmpeg(inputFile)
+      .inputFormat('webm')
+      .audioFrequency(24000)
+      .audioChannels(1)
+      .save(inputMp3File)
+      .on('end', () => {
+        this.logger.log('Umwandlung in MP3 abgeschlossen');
+        // Optional: fs.unlinkSync(pcmFile); // Lösche die temporäre PCM Datei
+      });
+
     this.clients.delete(client);
     this.logger.log('Client disconnected');
   }
@@ -178,6 +229,9 @@ export class OwnWebSocketGateway implements OnGatewayConnection, OnGatewayDiscon
 
     if (clientData?.audioConverter) {
       const buffer = Buffer.from(data.chunk, 'base64');
+      clientData.inputFileStream.write(buffer);
+
+
       clientData.audioConverter.write(buffer);
       clientData.pendingInputChunks.push({ sequence: data.sequence, receivedAt: Date.now() });
       this.logger.debug(`[latency] seq ${data.sequence}: chunk queued for FFmpeg (${buffer.length} bytes)`);

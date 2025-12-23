@@ -341,8 +341,8 @@
           noiseSuppression: false,
           autoGainControl: true,
           sampleRate: 24000,
-          channelCount: 1,
-          sampleSize: 8
+          // channelCount: 1,
+          // sampleSize: 8
         }
       });
       console.log('Starte Aufnahme... 2');
@@ -381,6 +381,7 @@
 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
+          console.log(mediaRecorder.mimeType);
           // Convert blob to base64 and send to server
           const reader = new FileReader();
           reader.onload = () => {
@@ -403,7 +404,7 @@
         }
       };
 
-      mediaRecorder.start(1000); // Record in smaller chunks (250ms) for better streaming
+      mediaRecorder.start(500); // Record in smaller chunks (250ms) for better streaming
       isRecording = true;
       recordingStartTime = Date.now();
       totalDataSize = 0;
