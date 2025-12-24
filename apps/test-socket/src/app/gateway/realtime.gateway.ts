@@ -9,7 +9,7 @@ import { IncomingMessage } from 'node:http';
 import { Server, WebSocket } from 'ws';
 import { AudioDeltaPayload, OpenAIRealtimeSocketHandler } from '../helper/OpenAISocketHandler';
 
-const RATE_LIMIT_BYTES = 500 * 1024; // 500KB per window
+const RATE_LIMIT_BYTES = 1024 * 1024;
 const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
 
 interface ClientSessionState {
@@ -136,6 +136,8 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
 
     const bufferArray = Buffer.from(buffer, 'base64');
     // const uint8Array = new Uint8Array(bufferArray.buffer, bufferArray.byteOffset, bufferArray.byteLength);
+    this.logger.log(`Received chunk of size ${bufferArray.byteLength} bytes`);
+    console.log(bufferArray);
 
     session.openAI.sendAudioChunk(bufferArray);
   }
