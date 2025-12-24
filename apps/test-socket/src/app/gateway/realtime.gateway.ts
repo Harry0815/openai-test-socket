@@ -143,6 +143,7 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   private forwardTts(client: WebSocket, payload: AudioDeltaPayload): void {
+    console.log('Forwarding TTS chunk to client:', payload);
     if (client.readyState !== client.OPEN) {
       return;
     }

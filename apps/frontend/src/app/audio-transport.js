@@ -19,6 +19,8 @@ export class AudioTransport {
     this.onStreamingChange = onStreamingChange;
     this.onFallback = onFallback;
     this.onError = onError;
+
+    this.connect();
   }
 
   async connect() {
