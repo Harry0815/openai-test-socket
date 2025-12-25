@@ -137,7 +137,7 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     const bufferArray = Buffer.from(buffer, 'base64');
     // const uint8Array = new Uint8Array(bufferArray.buffer, bufferArray.byteOffset, bufferArray.byteLength);
     this.logger.log(`Received chunk of size ${bufferArray.byteLength} bytes`);
-    console.log(bufferArray);
+    // console.log(bufferArray);
 
     session.openAI.sendAudioChunk(bufferArray);
   }
