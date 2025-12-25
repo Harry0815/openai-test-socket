@@ -36,7 +36,7 @@ export class AudioWidget {
   async start() {
     this._resetFallbackBadge();
     try {
-      await this.transport.connect();
+      // await this.transport.connect();
       await this.streamService.startCapture({ encoder: this.encoderSelect.value });
       this._setRunning(true);
     } catch (err) {

@@ -237,6 +237,8 @@ export class OpenAIRealtimeSocketHandler {
     }
     // 4. Event Dispatching basierend auf dem OpenAI Message-Typ
     console.log('OpenAI Realtime Message:', msg.type);
+    if (msg.type !== 'response.output_audio.delta')
+      console.log(msg);
     switch (msg.type) {
       case 'response.output_audio.done':
         // this.markResponseComplete();
@@ -278,7 +280,7 @@ export class OpenAIRealtimeSocketHandler {
         break;
 
       case 'response.completed':
-        // this.markResponseComplete();
+        this.markResponseComplete();
         this.events.emit('response.complete', msg);
         break;
 

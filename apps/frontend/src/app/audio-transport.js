@@ -19,6 +19,8 @@ export class AudioTransport {
     this.onStreamingChange = onStreamingChange;
     this.onFallback = onFallback;
     this.onError = onError;
+
+    this.connect();
   }
 
   async connect() {
@@ -204,15 +206,23 @@ export class AudioTransport {
     this.onConnectionChange?.('getrennt');
   }
 
+
   _wrapPayload(payload, encoder) {
-    const header = JSON.stringify({ t: 'audio', encoder });
-    const headerBytes = new TextEncoder().encode(header);
-    const combined = new Uint8Array(4 + headerBytes.length + payload.length);
-    const view = new DataView(combined.buffer);
-    view.setUint32(0, headerBytes.length, true);
-    combined.set(headerBytes, 4);
-    combined.set(payload, 4 + headerBytes.length);
-    return combined;
+    // Uint8Array in Binär-String umwandeln
+    let binary = '';
+    const len = payload.byteLength;
+    for (let i = 0; i < len; i++) {
+      binary += String.fromCharCode(payload[i]);
+    }
+
+    // Binär-String in Base64
+    const base64Data = btoa(binary);
+
+    const p = {
+      type: 'audio',
+      data: base64Data
+    }
+    return JSON.stringify(p);
   }
 
   _setStreaming(active) {
