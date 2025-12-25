@@ -133,7 +133,7 @@ export class OpenAIRealtimeSocketHandler {
         "instructions": "Du bist ein Simultanübersetzer. Übersetze fortlaufend von Deutsch nach Englisch. Antworte ausschließlich mit der Übersetzung, keine Kommentare.",
         "audio": {
           "input": {
-            "format": { "type": "audio/pcm", "rate": 24000 },
+            "format": { "type": "audio/pcm", "rate": this.options.inputSampleRate },
             "turn_detection": { "type": "server_vad", "threshold": 0.5, "prefix_padding_ms": 200, "silence_duration_ms": 250 }
           },
           "output": {
@@ -188,7 +188,7 @@ export class OpenAIRealtimeSocketHandler {
         audio: {
           voice: "marin",
           format: 'pcm16',
-          // sample_rate: 16000,
+          sample_rate: this.options.outputSampleRate,
         },
       },
     }));
