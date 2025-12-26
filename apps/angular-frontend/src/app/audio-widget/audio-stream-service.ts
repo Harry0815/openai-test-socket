@@ -63,6 +63,9 @@ export class AudioStreamService {
     if (this.isCapturing) {
       return;
     }
+    if (this.audioContext === null) {
+      return;
+    }
     this.encoder = encoder;
 
     await this.ensureContext();
