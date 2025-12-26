@@ -1,18 +1,15 @@
 import {
-  Title
-} from "./chunk-JITDVJVL.js";
-import {
   DOCUMENT,
   HashLocationStrategy,
   LOCATION_INITIALIZED,
   Location,
   LocationStrategy,
   PathLocationStrategy,
+  Title,
   ViewportScroller
-} from "./chunk-P73P33NA.js";
+} from "./chunk-ZFW2SRKY.js";
 import {
   APP_BOOTSTRAP_LISTENER,
-  APP_INITIALIZER,
   ApplicationRef,
   Attribute,
   BehaviorSubject,
@@ -22,6 +19,7 @@ import {
   ConnectableObservable,
   Console,
   ContentChildren,
+  DestroyRef,
   Directive,
   EMPTY,
   ENVIRONMENT_INITIALIZER,
@@ -31,7 +29,6 @@ import {
   EventEmitter,
   HostBinding,
   HostListener,
-  Inject,
   InjectFlags,
   Injectable,
   InjectionToken,
@@ -42,7 +39,7 @@ import {
   NgZone,
   Optional,
   Output,
-  PendingTasks,
+  PendingTasksInternal,
   Renderer2,
   RuntimeError,
   SkipSelf,
@@ -66,6 +63,7 @@ import {
   first,
   from,
   inject,
+  input,
   isInjectable,
   isNgModule,
   isObservable,
@@ -74,11 +72,12 @@ import {
   last,
   makeEnvironmentProviders,
   map,
-  mapTo,
   mergeAll,
   mergeMap,
   of,
+  performanceMarkFeature,
   pipe,
+  provideAppInitializer,
   refCount,
   reflectComponentType,
   runInInjectionContext,
@@ -91,9 +90,7 @@ import {
   takeUntil,
   tap,
   throwError,
-  ɵɵInputTransformsFeature,
   ɵɵNgOnChangesFeature,
-  ɵɵStandaloneFeature,
   ɵɵattribute,
   ɵɵcontentQuery,
   ɵɵdefineComponent,
@@ -111,12 +108,13 @@ import {
   ɵɵloadQuery,
   ɵɵqueryRefresh,
   ɵɵsanitizeUrlOrResourceUrl
-} from "./chunk-WO4GTBY6.js";
+} from "./chunk-BVTU6VRO.js";
 
-// node_modules/@angular/router/fesm2022/router.mjs
+// node_modules/@angular/router/fesm2022/router-Dwfin5Au.mjs
 var PRIMARY_OUTLET = "primary";
 var RouteTitleKey = Symbol("RouteTitle");
 var ParamsAsMap = class {
+  params;
   constructor(params) {
     this.params = params || {};
   }
@@ -280,6 +278,11 @@ function matrixParamsMatch(containerPaths, containeePaths, options) {
   });
 }
 var UrlTree = class {
+  root;
+  queryParams;
+  fragment;
+  /** @internal */
+  _queryParamMap;
   constructor(root = new UrlSegmentGroup([], {}), queryParams = {}, fragment = null) {
     this.root = root;
     this.queryParams = queryParams;
@@ -300,10 +303,13 @@ var UrlTree = class {
   }
 };
 var UrlSegmentGroup = class {
+  segments;
+  children;
+  /** The parent node in the url tree */
+  parent = null;
   constructor(segments, children) {
     this.segments = segments;
     this.children = children;
-    this.parent = null;
     Object.values(children).forEach((v) => v.parent = this);
   }
   /** Whether the segment has child segments */
@@ -320,6 +326,10 @@ var UrlSegmentGroup = class {
   }
 };
 var UrlSegment = class {
+  path;
+  parameters;
+  /** @internal */
+  _parameterMap;
   constructor(path, parameters) {
     this.path = path;
     this.parameters = parameters;
@@ -355,18 +365,14 @@ function mapChildrenIntoArray(segment, fn) {
   return res;
 }
 var UrlSerializer = class _UrlSerializer {
-  static {
-    this.ɵfac = function UrlSerializer_Factory(__ngFactoryType__) {
-      return new (__ngFactoryType__ || _UrlSerializer)();
-    };
-  }
-  static {
-    this.ɵprov = ɵɵdefineInjectable({
-      token: _UrlSerializer,
-      factory: () => (() => new DefaultUrlSerializer())(),
-      providedIn: "root"
-    });
-  }
+  static ɵfac = function UrlSerializer_Factory(__ngFactoryType__) {
+    return new (__ngFactoryType__ || _UrlSerializer)();
+  };
+  static ɵprov = ɵɵdefineInjectable({
+    token: _UrlSerializer,
+    factory: () => (() => new DefaultUrlSerializer())(),
+    providedIn: "root"
+  });
 };
 (() => {
   (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(UrlSerializer, [{
@@ -472,6 +478,8 @@ function matchUrlQueryParamValue(str) {
   return match2 ? match2[0] : "";
 }
 var UrlParser = class {
+  url;
+  remaining;
   constructor(url) {
     this.url = url;
     this.remaining = url;
@@ -726,6 +734,9 @@ function replaceSegment(current, oldSegment, newSegment) {
   return new UrlSegmentGroup(current.segments, children);
 }
 var Navigation = class {
+  isAbsolute;
+  numberOfDoubleDots;
+  commands;
   constructor(isAbsolute, numberOfDoubleDots, commands) {
     this.isAbsolute = isAbsolute;
     this.numberOfDoubleDots = numberOfDoubleDots;
@@ -768,8 +779,8 @@ function computeNavigation(commands) {
     }
     if (cmdIdx === 0) {
       cmd.split("/").forEach((urlPart, partIndex) => {
-        if (partIndex == 0 && urlPart === ".") {
-        } else if (partIndex == 0 && urlPart === "") {
+        if (partIndex == 0 && urlPart === ".") ;
+        else if (partIndex == 0 && urlPart === "") {
           isAbsolute = true;
         } else if (urlPart === "..") {
           numberOfDoubleDots++;
@@ -784,6 +795,9 @@ function computeNavigation(commands) {
   return new Navigation(isAbsolute, numberOfDoubleDots, res);
 }
 var Position = class {
+  segmentGroup;
+  processChildren;
+  index;
   constructor(segmentGroup, processChildren, index) {
     this.segmentGroup = segmentGroup;
     this.processChildren = processChildren;
@@ -975,15 +989,44 @@ var EventType;
   EventType2[EventType2["NavigationSkipped"] = 16] = "NavigationSkipped";
 })(EventType || (EventType = {}));
 var RouterEvent = class {
+  id;
+  url;
   constructor(id, url) {
     this.id = id;
     this.url = url;
   }
 };
 var NavigationStart = class extends RouterEvent {
+  type = EventType.NavigationStart;
+  /**
+   * Identifies the call or event that triggered the navigation.
+   * An `imperative` trigger is a call to `router.navigateByUrl()` or `router.navigate()`.
+   *
+   * @see {@link NavigationEnd}
+   * @see {@link NavigationCancel}
+   * @see {@link NavigationError}
+   */
+  navigationTrigger;
+  /**
+   * The navigation state that was previously supplied to the `pushState` call,
+   * when the navigation is triggered by a `popstate` event. Otherwise null.
+   *
+   * The state object is defined by `NavigationExtras`, and contains any
+   * developer-defined state value, as well as a unique ID that
+   * the router assigns to every router transition/navigation.
+   *
+   * From the perspective of the router, the router never "goes back".
+   * When the user clicks on the back button in the browser,
+   * a new navigation ID is created.
+   *
+   * Use the ID in this previous-state object to differentiate between a newly created
+   * state and one returned to by a `popstate` event, so that you can restore some
+   * remembered state, such as scroll position.
+   *
+   */
+  restoredState;
   constructor(id, url, navigationTrigger = "imperative", restoredState = null) {
     super(id, url);
-    this.type = EventType.NavigationStart;
     this.navigationTrigger = navigationTrigger;
     this.restoredState = restoredState;
   }
@@ -993,10 +1036,11 @@ var NavigationStart = class extends RouterEvent {
   }
 };
 var NavigationEnd = class extends RouterEvent {
+  urlAfterRedirects;
+  type = EventType.NavigationEnd;
   constructor(id, url, urlAfterRedirects) {
     super(id, url);
     this.urlAfterRedirects = urlAfterRedirects;
-    this.type = EventType.NavigationEnd;
   }
   /** @docsNotRequired */
   toString() {
@@ -1016,11 +1060,13 @@ var NavigationSkippedCode;
   NavigationSkippedCode2[NavigationSkippedCode2["IgnoredByUrlHandlingStrategy"] = 1] = "IgnoredByUrlHandlingStrategy";
 })(NavigationSkippedCode || (NavigationSkippedCode = {}));
 var NavigationCancel = class extends RouterEvent {
+  reason;
+  code;
+  type = EventType.NavigationCancel;
   constructor(id, url, reason, code) {
     super(id, url);
     this.reason = reason;
     this.code = code;
-    this.type = EventType.NavigationCancel;
   }
   /** @docsNotRequired */
   toString() {
@@ -1028,19 +1074,23 @@ var NavigationCancel = class extends RouterEvent {
   }
 };
 var NavigationSkipped = class extends RouterEvent {
+  reason;
+  code;
+  type = EventType.NavigationSkipped;
   constructor(id, url, reason, code) {
     super(id, url);
     this.reason = reason;
     this.code = code;
-    this.type = EventType.NavigationSkipped;
   }
 };
 var NavigationError = class extends RouterEvent {
+  error;
+  target;
+  type = EventType.NavigationError;
   constructor(id, url, error, target) {
     super(id, url);
     this.error = error;
     this.target = target;
-    this.type = EventType.NavigationError;
   }
   /** @docsNotRequired */
   toString() {
@@ -1048,11 +1098,13 @@ var NavigationError = class extends RouterEvent {
   }
 };
 var RoutesRecognized = class extends RouterEvent {
+  urlAfterRedirects;
+  state;
+  type = EventType.RoutesRecognized;
   constructor(id, url, urlAfterRedirects, state) {
     super(id, url);
     this.urlAfterRedirects = urlAfterRedirects;
     this.state = state;
-    this.type = EventType.RoutesRecognized;
   }
   /** @docsNotRequired */
   toString() {
@@ -1060,72 +1112,84 @@ var RoutesRecognized = class extends RouterEvent {
   }
 };
 var GuardsCheckStart = class extends RouterEvent {
+  urlAfterRedirects;
+  state;
+  type = EventType.GuardsCheckStart;
   constructor(id, url, urlAfterRedirects, state) {
     super(id, url);
     this.urlAfterRedirects = urlAfterRedirects;
     this.state = state;
-    this.type = EventType.GuardsCheckStart;
   }
   toString() {
     return `GuardsCheckStart(id: ${this.id}, url: '${this.url}', urlAfterRedirects: '${this.urlAfterRedirects}', state: ${this.state})`;
   }
 };
 var GuardsCheckEnd = class extends RouterEvent {
+  urlAfterRedirects;
+  state;
+  shouldActivate;
+  type = EventType.GuardsCheckEnd;
   constructor(id, url, urlAfterRedirects, state, shouldActivate) {
     super(id, url);
     this.urlAfterRedirects = urlAfterRedirects;
     this.state = state;
     this.shouldActivate = shouldActivate;
-    this.type = EventType.GuardsCheckEnd;
   }
   toString() {
     return `GuardsCheckEnd(id: ${this.id}, url: '${this.url}', urlAfterRedirects: '${this.urlAfterRedirects}', state: ${this.state}, shouldActivate: ${this.shouldActivate})`;
   }
 };
 var ResolveStart = class extends RouterEvent {
+  urlAfterRedirects;
+  state;
+  type = EventType.ResolveStart;
   constructor(id, url, urlAfterRedirects, state) {
     super(id, url);
     this.urlAfterRedirects = urlAfterRedirects;
     this.state = state;
-    this.type = EventType.ResolveStart;
   }
   toString() {
     return `ResolveStart(id: ${this.id}, url: '${this.url}', urlAfterRedirects: '${this.urlAfterRedirects}', state: ${this.state})`;
   }
 };
 var ResolveEnd = class extends RouterEvent {
+  urlAfterRedirects;
+  state;
+  type = EventType.ResolveEnd;
   constructor(id, url, urlAfterRedirects, state) {
     super(id, url);
     this.urlAfterRedirects = urlAfterRedirects;
     this.state = state;
-    this.type = EventType.ResolveEnd;
   }
   toString() {
     return `ResolveEnd(id: ${this.id}, url: '${this.url}', urlAfterRedirects: '${this.urlAfterRedirects}', state: ${this.state})`;
   }
 };
 var RouteConfigLoadStart = class {
+  route;
+  type = EventType.RouteConfigLoadStart;
   constructor(route) {
     this.route = route;
-    this.type = EventType.RouteConfigLoadStart;
   }
   toString() {
     return `RouteConfigLoadStart(path: ${this.route.path})`;
   }
 };
 var RouteConfigLoadEnd = class {
+  route;
+  type = EventType.RouteConfigLoadEnd;
   constructor(route) {
     this.route = route;
-    this.type = EventType.RouteConfigLoadEnd;
   }
   toString() {
     return `RouteConfigLoadEnd(path: ${this.route.path})`;
   }
 };
 var ChildActivationStart = class {
+  snapshot;
+  type = EventType.ChildActivationStart;
   constructor(snapshot) {
     this.snapshot = snapshot;
-    this.type = EventType.ChildActivationStart;
   }
   toString() {
     const path = this.snapshot.routeConfig && this.snapshot.routeConfig.path || "";
@@ -1133,9 +1197,10 @@ var ChildActivationStart = class {
   }
 };
 var ChildActivationEnd = class {
+  snapshot;
+  type = EventType.ChildActivationEnd;
   constructor(snapshot) {
     this.snapshot = snapshot;
-    this.type = EventType.ChildActivationEnd;
   }
   toString() {
     const path = this.snapshot.routeConfig && this.snapshot.routeConfig.path || "";
@@ -1143,9 +1208,10 @@ var ChildActivationEnd = class {
   }
 };
 var ActivationStart = class {
+  snapshot;
+  type = EventType.ActivationStart;
   constructor(snapshot) {
     this.snapshot = snapshot;
-    this.type = EventType.ActivationStart;
   }
   toString() {
     const path = this.snapshot.routeConfig && this.snapshot.routeConfig.path || "";
@@ -1153,9 +1219,10 @@ var ActivationStart = class {
   }
 };
 var ActivationEnd = class {
+  snapshot;
+  type = EventType.ActivationEnd;
   constructor(snapshot) {
     this.snapshot = snapshot;
-    this.type = EventType.ActivationEnd;
   }
   toString() {
     const path = this.snapshot.routeConfig && this.snapshot.routeConfig.path || "";
@@ -1163,11 +1230,14 @@ var ActivationEnd = class {
   }
 };
 var Scroll = class {
+  routerEvent;
+  position;
+  anchor;
+  type = EventType.Scroll;
   constructor(routerEvent, position, anchor) {
     this.routerEvent = routerEvent;
     this.position = position;
     this.anchor = anchor;
-    this.type = EventType.Scroll;
   }
   toString() {
     const pos = this.position ? `${this.position[0]}, ${this.position[1]}` : null;
@@ -1177,6 +1247,8 @@ var Scroll = class {
 var BeforeActivateRoutes = class {
 };
 var RedirectRequest = class {
+  url;
+  navigationBehaviorOptions;
   constructor(url, navigationBehaviorOptions) {
     this.url = url;
     this.navigationBehaviorOptions = navigationBehaviorOptions;
@@ -1339,25 +1411,26 @@ function getClosestRouteInjector(snapshot) {
   return null;
 }
 var OutletContext = class {
+  rootInjector;
+  outlet = null;
+  route = null;
+  children;
+  attachRef = null;
   get injector() {
     return getClosestRouteInjector(this.route?.snapshot) ?? this.rootInjector;
   }
-  // TODO(atscott): Only here to avoid a "breaking" change in a patch/minor. Remove in v19.
-  set injector(_) {
-  }
   constructor(rootInjector) {
     this.rootInjector = rootInjector;
-    this.outlet = null;
-    this.route = null;
     this.children = new ChildrenOutletContexts(this.rootInjector);
-    this.attachRef = null;
   }
 };
 var ChildrenOutletContexts = class _ChildrenOutletContexts {
-  /** @nodoc */
+  rootInjector;
+  // contexts for child outlets, by name.
+  contexts = /* @__PURE__ */ new Map();
+  /** @docs-private */
   constructor(rootInjector) {
     this.rootInjector = rootInjector;
-    this.contexts = /* @__PURE__ */ new Map();
   }
   /** Called when a `RouterOutlet` directive is instantiated */
   onChildOutletCreated(childName, outlet) {
@@ -1400,18 +1473,14 @@ var ChildrenOutletContexts = class _ChildrenOutletContexts {
   getContext(childName) {
     return this.contexts.get(childName) || null;
   }
-  static {
-    this.ɵfac = function ChildrenOutletContexts_Factory(__ngFactoryType__) {
-      return new (__ngFactoryType__ || _ChildrenOutletContexts)(ɵɵinject(EnvironmentInjector));
-    };
-  }
-  static {
-    this.ɵprov = ɵɵdefineInjectable({
-      token: _ChildrenOutletContexts,
-      factory: _ChildrenOutletContexts.ɵfac,
-      providedIn: "root"
-    });
-  }
+  static ɵfac = function ChildrenOutletContexts_Factory(__ngFactoryType__) {
+    return new (__ngFactoryType__ || _ChildrenOutletContexts)(ɵɵinject(EnvironmentInjector));
+  };
+  static ɵprov = ɵɵdefineInjectable({
+    token: _ChildrenOutletContexts,
+    factory: _ChildrenOutletContexts.ɵfac,
+    providedIn: "root"
+  });
 };
 (() => {
   (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(ChildrenOutletContexts, [{
@@ -1424,6 +1493,8 @@ var ChildrenOutletContexts = class _ChildrenOutletContexts {
   }], null);
 })();
 var Tree = class {
+  /** @internal */
+  _root;
   constructor(root) {
     this._root = root;
   }
@@ -1487,6 +1558,8 @@ function findPath(value, node) {
   return [];
 }
 var TreeNode = class {
+  value;
+  children;
   constructor(value, children) {
     this.value = value;
     this.children = children;
@@ -1503,6 +1576,7 @@ function nodeChildrenAsMap(node) {
   return map2;
 }
 var RouterState = class extends Tree {
+  snapshot;
   /** @internal */
   constructor(root, snapshot) {
     super(root);
@@ -1533,6 +1607,35 @@ function createEmptyStateSnapshot(rootComponent) {
   return new RouterStateSnapshot("", new TreeNode(activated, []));
 }
 var ActivatedRoute = class {
+  urlSubject;
+  paramsSubject;
+  queryParamsSubject;
+  fragmentSubject;
+  dataSubject;
+  outlet;
+  component;
+  /** The current snapshot of this route */
+  snapshot;
+  /** @internal */
+  _futureSnapshot;
+  /** @internal */
+  _routerState;
+  /** @internal */
+  _paramMap;
+  /** @internal */
+  _queryParamMap;
+  /** An Observable of the resolved route title */
+  title;
+  /** An observable of the URL segments matched by this route. */
+  url;
+  /** An observable of the matrix parameters scoped to this route. */
+  params;
+  /** An observable of the query parameters shared by all the routes. */
+  queryParams;
+  /** An observable of the URL fragment shared by all the routes. */
+  fragment;
+  /** An observable of the static and resolved data of this route. */
+  data;
   /** @internal */
   constructor(urlSubject, paramsSubject, queryParamsSubject, fragmentSubject, dataSubject, outlet, component, futureSnapshot) {
     this.urlSubject = urlSubject;
@@ -1621,6 +1724,25 @@ function getInherited(route, parent, paramsInheritanceStrategy = "emptyOnly") {
   return inherited;
 }
 var ActivatedRouteSnapshot = class {
+  url;
+  params;
+  queryParams;
+  fragment;
+  data;
+  outlet;
+  component;
+  /** The configuration used to match this route **/
+  routeConfig;
+  /** @internal */
+  _resolve;
+  /** @internal */
+  _resolvedData;
+  /** @internal */
+  _routerState;
+  /** @internal */
+  _paramMap;
+  /** @internal */
+  _queryParamMap;
   /** The resolved route title */
   get title() {
     return this.data?.[RouteTitleKey];
@@ -1672,6 +1794,7 @@ var ActivatedRouteSnapshot = class {
   }
 };
 var RouterStateSnapshot = class extends Tree {
+  url;
   /** @internal */
   constructor(url, root) {
     super(root);
@@ -1723,28 +1846,46 @@ function equalParamsAndUrlSegments(a, b) {
 function hasStaticTitle(config) {
   return typeof config.title === "string" || config.title === null;
 }
+var ROUTER_OUTLET_DATA = new InjectionToken(ngDevMode ? "RouterOutlet data" : "");
 var RouterOutlet = class _RouterOutlet {
-  constructor() {
-    this.activated = null;
-    this._activatedRoute = null;
-    this.name = PRIMARY_OUTLET;
-    this.activateEvents = new EventEmitter();
-    this.deactivateEvents = new EventEmitter();
-    this.attachEvents = new EventEmitter();
-    this.detachEvents = new EventEmitter();
-    this.parentContexts = inject(ChildrenOutletContexts);
-    this.location = inject(ViewContainerRef);
-    this.changeDetector = inject(ChangeDetectorRef);
-    this.inputBinder = inject(INPUT_BINDER, {
-      optional: true
-    });
-    this.supportsBindingToComponentInputs = true;
-  }
+  activated = null;
   /** @internal */
   get activatedComponentRef() {
     return this.activated;
   }
-  /** @nodoc */
+  _activatedRoute = null;
+  /**
+   * The name of the outlet
+   *
+   */
+  name = PRIMARY_OUTLET;
+  activateEvents = new EventEmitter();
+  deactivateEvents = new EventEmitter();
+  /**
+   * Emits an attached component instance when the `RouteReuseStrategy` instructs to re-attach a
+   * previously detached subtree.
+   **/
+  attachEvents = new EventEmitter();
+  /**
+   * Emits a detached component instance when the `RouteReuseStrategy` instructs to detach the
+   * subtree.
+   */
+  detachEvents = new EventEmitter();
+  /**
+   * Data that will be provided to the child injector through the `ROUTER_OUTLET_DATA` token.
+   *
+   * When unset, the value of the token is `undefined` by default.
+   */
+  routerOutletData = input(void 0);
+  parentContexts = inject(ChildrenOutletContexts);
+  location = inject(ViewContainerRef);
+  changeDetector = inject(ChangeDetectorRef);
+  inputBinder = inject(INPUT_BINDER, {
+    optional: true
+  });
+  /** @docs-private */
+  supportsBindingToComponentInputs = true;
+  /** @docs-private */
   ngOnChanges(changes) {
     if (changes["name"]) {
       const {
@@ -1761,7 +1902,7 @@ var RouterOutlet = class _RouterOutlet {
       this.initializeOutletWithName();
     }
   }
-  /** @nodoc */
+  /** @docs-private */
   ngOnDestroy() {
     if (this.isTrackedInParentContexts(this.name)) {
       this.parentContexts.onChildOutletDestroyed(this.name);
@@ -1771,7 +1912,7 @@ var RouterOutlet = class _RouterOutlet {
   isTrackedInParentContexts(outletName) {
     return this.parentContexts.getContext(outletName)?.outlet === this;
   }
-  /** @nodoc */
+  /** @docs-private */
   ngOnInit() {
     this.initializeOutletWithName();
   }
@@ -1850,7 +1991,7 @@ var RouterOutlet = class _RouterOutlet {
     const snapshot = activatedRoute.snapshot;
     const component = snapshot.component;
     const childContexts = this.parentContexts.getOrCreateContext(this.name).children;
-    const injector = new OutletInjector(activatedRoute, childContexts, location.injector);
+    const injector = new OutletInjector(activatedRoute, childContexts, location.injector, this.routerOutletData);
     this.activated = location.createComponent(component, {
       index: location.length,
       injector,
@@ -1860,37 +2001,32 @@ var RouterOutlet = class _RouterOutlet {
     this.inputBinder?.bindActivatedRouteToOutletComponent(this);
     this.activateEvents.emit(this.activated.instance);
   }
-  static {
-    this.ɵfac = function RouterOutlet_Factory(__ngFactoryType__) {
-      return new (__ngFactoryType__ || _RouterOutlet)();
-    };
-  }
-  static {
-    this.ɵdir = ɵɵdefineDirective({
-      type: _RouterOutlet,
-      selectors: [["router-outlet"]],
-      inputs: {
-        name: "name"
-      },
-      outputs: {
-        activateEvents: "activate",
-        deactivateEvents: "deactivate",
-        attachEvents: "attach",
-        detachEvents: "detach"
-      },
-      exportAs: ["outlet"],
-      standalone: true,
-      features: [ɵɵNgOnChangesFeature]
-    });
-  }
+  static ɵfac = function RouterOutlet_Factory(__ngFactoryType__) {
+    return new (__ngFactoryType__ || _RouterOutlet)();
+  };
+  static ɵdir = ɵɵdefineDirective({
+    type: _RouterOutlet,
+    selectors: [["router-outlet"]],
+    inputs: {
+      name: "name",
+      routerOutletData: [1, "routerOutletData"]
+    },
+    outputs: {
+      activateEvents: "activate",
+      deactivateEvents: "deactivate",
+      attachEvents: "attach",
+      detachEvents: "detach"
+    },
+    exportAs: ["outlet"],
+    features: [ɵɵNgOnChangesFeature]
+  });
 };
 (() => {
   (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(RouterOutlet, [{
     type: Directive,
     args: [{
       selector: "router-outlet",
-      exportAs: "outlet",
-      standalone: true
+      exportAs: "outlet"
     }]
   }], null, {
     name: [{
@@ -1914,29 +2050,16 @@ var RouterOutlet = class _RouterOutlet {
     }]
   });
 })();
-var OutletInjector = class _OutletInjector {
-  /**
-   * This injector has a special handing for the `ActivatedRoute` and
-   * `ChildrenOutletContexts` tokens: it returns corresponding values for those
-   * tokens dynamically. This behavior is different from the regular injector logic,
-   * when we initialize and store a value, which is later returned for all inject
-   * requests.
-   *
-   * In some cases (e.g. when using `@defer`), this dynamic behavior requires special
-   * handling. This function allows to identify an instance of the `OutletInjector` and
-   * create an instance of it without referring to the class itself (so this logic can
-   * be invoked from the `core` package). This helps to retain dynamic behavior for the
-   * mentioned tokens.
-   *
-   * Note: it's a temporary solution and we should explore how to support this case better.
-   */
-  __ngOutletInjector(parentInjector) {
-    return new _OutletInjector(this.route, this.childContexts, parentInjector);
-  }
-  constructor(route, childContexts, parent) {
+var OutletInjector = class {
+  route;
+  childContexts;
+  parent;
+  outletData;
+  constructor(route, childContexts, parent, outletData) {
     this.route = route;
     this.childContexts = childContexts;
     this.parent = parent;
+    this.outletData = outletData;
   }
   get(token, notFoundValue) {
     if (token === ActivatedRoute) {
@@ -1945,14 +2068,15 @@ var OutletInjector = class _OutletInjector {
     if (token === ChildrenOutletContexts) {
       return this.childContexts;
     }
+    if (token === ROUTER_OUTLET_DATA) {
+      return this.outletData;
+    }
     return this.parent.get(token, notFoundValue);
   }
 };
 var INPUT_BINDER = new InjectionToken("");
 var RoutedComponentInputBinder = class _RoutedComponentInputBinder {
-  constructor() {
-    this.outletDataSubscriptions = /* @__PURE__ */ new Map();
-  }
+  outletDataSubscriptions = /* @__PURE__ */ new Map();
   bindActivatedRouteToOutletComponent(outlet) {
     this.unsubscribeFromRouteData(outlet);
     this.subscribeToRouteData(outlet);
@@ -1989,23 +2113,59 @@ var RoutedComponentInputBinder = class _RoutedComponentInputBinder {
     });
     this.outletDataSubscriptions.set(outlet, dataSubscription);
   }
-  static {
-    this.ɵfac = function RoutedComponentInputBinder_Factory(__ngFactoryType__) {
-      return new (__ngFactoryType__ || _RoutedComponentInputBinder)();
-    };
-  }
-  static {
-    this.ɵprov = ɵɵdefineInjectable({
-      token: _RoutedComponentInputBinder,
-      factory: _RoutedComponentInputBinder.ɵfac
-    });
-  }
+  static ɵfac = function RoutedComponentInputBinder_Factory(__ngFactoryType__) {
+    return new (__ngFactoryType__ || _RoutedComponentInputBinder)();
+  };
+  static ɵprov = ɵɵdefineInjectable({
+    token: _RoutedComponentInputBinder,
+    factory: _RoutedComponentInputBinder.ɵfac
+  });
 };
 (() => {
   (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(RoutedComponentInputBinder, [{
     type: Injectable
   }], null, null);
 })();
+var ɵEmptyOutletComponent = class _ɵEmptyOutletComponent {
+  static ɵfac = function ɵEmptyOutletComponent_Factory(__ngFactoryType__) {
+    return new (__ngFactoryType__ || _ɵEmptyOutletComponent)();
+  };
+  static ɵcmp = ɵɵdefineComponent({
+    type: _ɵEmptyOutletComponent,
+    selectors: [["ng-component"]],
+    exportAs: ["emptyRouterOutlet"],
+    decls: 1,
+    vars: 0,
+    template: function _EmptyOutletComponent_Template(rf, ctx) {
+      if (rf & 1) {
+        ɵɵelement(0, "router-outlet");
+      }
+    },
+    dependencies: [RouterOutlet],
+    encapsulation: 2
+  });
+};
+(() => {
+  (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(ɵEmptyOutletComponent, [{
+    type: Component,
+    args: [{
+      template: `<router-outlet/>`,
+      imports: [RouterOutlet],
+      // Used to avoid component ID collisions with user code.
+      exportAs: "emptyRouterOutlet"
+    }]
+  }], null, null);
+})();
+function standardizeConfig(r) {
+  const children = r.children && r.children.map(standardizeConfig);
+  const c = children ? __spreadProps(__spreadValues({}, r), {
+    children
+  }) : __spreadValues({}, r);
+  if (!c.component && !c.loadComponent && (children || c.loadChildren) && c.outlet && c.outlet !== PRIMARY_OUTLET) {
+    c.component = ɵEmptyOutletComponent;
+  }
+  return c;
+}
 function createRouterState(routeReuseStrategy, curr, prevState) {
   const root = createNode(routeReuseStrategy, curr._root, prevState ? prevState._root : void 0);
   return new RouterState(root, curr);
@@ -2045,6 +2205,8 @@ function createActivatedRoute(c) {
   return new ActivatedRoute(new BehaviorSubject(c.url), new BehaviorSubject(c.params), new BehaviorSubject(c.queryParams), new BehaviorSubject(c.fragment), new BehaviorSubject(c.data), c.outlet, c.component, c);
 }
 var RedirectCommand = class {
+  redirectTo;
+  navigationBehaviorOptions;
   constructor(redirectTo, navigationBehaviorOptions) {
     this.redirectTo = redirectTo;
     this.navigationBehaviorOptions = navigationBehaviorOptions;
@@ -2082,6 +2244,11 @@ var activateRoutes = (rootContexts, routeReuseStrategy, forwardEvent, inputBindi
   return t;
 });
 var ActivateRoutes = class {
+  routeReuseStrategy;
+  futureState;
+  currState;
+  forwardEvent;
+  inputBindingEnabled;
   constructor(routeReuseStrategy, futureState, currState, forwardEvent, inputBindingEnabled) {
     this.routeReuseStrategy = routeReuseStrategy;
     this.futureState = futureState;
@@ -2224,12 +2391,16 @@ var ActivateRoutes = class {
   }
 };
 var CanActivate = class {
+  path;
+  route;
   constructor(path) {
     this.path = path;
     this.route = this.path[this.path.length - 1];
   }
 };
 var CanDeactivate = class {
+  component;
+  route;
   constructor(component, route) {
     this.component = component;
     this.route = route;
@@ -2505,11 +2676,13 @@ function runCanMatchGuards(injector, route, segments, urlSerializer) {
   return of(canMatchObservables).pipe(prioritizedGuardValue(), redirectIfUrlTree(urlSerializer));
 }
 var NoMatch = class {
+  segmentGroup;
   constructor(segmentGroup) {
     this.segmentGroup = segmentGroup || null;
   }
 };
 var AbsoluteRedirect = class extends Error {
+  urlTree;
   constructor(urlTree) {
     super();
     this.urlTree = urlTree;
@@ -2525,6 +2698,8 @@ function canLoadFails(route) {
   return throwError(navigationCancelingError((typeof ngDevMode === "undefined" || ngDevMode) && `Cannot load children because the guard of the route "path: '${route.path}'" returned false`, NavigationCancellationCode.GuardRejected));
 }
 var ApplyRedirects = class {
+  urlSerializer;
+  urlTree;
   constructor(urlSerializer, urlTree) {
     this.urlSerializer = urlSerializer;
     this.urlTree = urlTree;
@@ -2743,6 +2918,16 @@ function recognize$1(injector, configLoader, rootComponentType, config, urlTree,
 }
 var MAX_ALLOWED_REDIRECTS = 31;
 var Recognizer = class {
+  injector;
+  configLoader;
+  rootComponentType;
+  config;
+  urlTree;
+  paramsInheritanceStrategy;
+  urlSerializer;
+  applyRedirects;
+  absoluteRedirectCount = 0;
+  allowRedirects = true;
   constructor(injector, configLoader, rootComponentType, config, urlTree, paramsInheritanceStrategy, urlSerializer) {
     this.injector = injector;
     this.configLoader = configLoader;
@@ -2752,8 +2937,6 @@ var Recognizer = class {
     this.paramsInheritanceStrategy = paramsInheritanceStrategy;
     this.urlSerializer = urlSerializer;
     this.applyRedirects = new ApplyRedirects(this.urlSerializer, this.urlTree);
-    this.absoluteRedirectCount = 0;
-    this.allowRedirects = true;
   }
   noMatchError(e) {
     return new RuntimeError(4002, typeof ngDevMode === "undefined" || ngDevMode ? `Cannot match any routes. URL Segment: '${e.segmentGroup}'` : `'${e.segmentGroup}'`);
@@ -3084,7 +3267,7 @@ function resolveNode(resolve, futureARS, futureRSS, injector) {
       throw redirectingNavigationError(new DefaultUrlSerializer(), value);
     }
     data[key] = value;
-  }))), takeLast(1), mapTo(data), catchError((e) => isEmptyError(e) ? EMPTY : throwError(e)));
+  }))), takeLast(1), map(() => data), catchError((e) => isEmptyError(e) ? EMPTY : throwError(e)));
 }
 function getResolver(injectionToken, futureARS, futureRSS, injector) {
   const closestInjector = getClosestRouteInjector(futureARS) ?? injector;
@@ -3121,18 +3304,14 @@ var TitleStrategy = class _TitleStrategy {
   getResolvedTitleForRoute(snapshot) {
     return snapshot.data[RouteTitleKey];
   }
-  static {
-    this.ɵfac = function TitleStrategy_Factory(__ngFactoryType__) {
-      return new (__ngFactoryType__ || _TitleStrategy)();
-    };
-  }
-  static {
-    this.ɵprov = ɵɵdefineInjectable({
-      token: _TitleStrategy,
-      factory: () => (() => inject(DefaultTitleStrategy))(),
-      providedIn: "root"
-    });
-  }
+  static ɵfac = function TitleStrategy_Factory(__ngFactoryType__) {
+    return new (__ngFactoryType__ || _TitleStrategy)();
+  };
+  static ɵprov = ɵɵdefineInjectable({
+    token: _TitleStrategy,
+    factory: () => (() => inject(DefaultTitleStrategy))(),
+    providedIn: "root"
+  });
 };
 (() => {
   (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(TitleStrategy, [{
@@ -3144,6 +3323,7 @@ var TitleStrategy = class _TitleStrategy {
   }], null, null);
 })();
 var DefaultTitleStrategy = class _DefaultTitleStrategy extends TitleStrategy {
+  title;
   constructor(title) {
     super();
     this.title = title;
@@ -3159,18 +3339,14 @@ var DefaultTitleStrategy = class _DefaultTitleStrategy extends TitleStrategy {
       this.title.setTitle(title);
     }
   }
-  static {
-    this.ɵfac = function DefaultTitleStrategy_Factory(__ngFactoryType__) {
-      return new (__ngFactoryType__ || _DefaultTitleStrategy)(ɵɵinject(Title));
-    };
-  }
-  static {
-    this.ɵprov = ɵɵdefineInjectable({
-      token: _DefaultTitleStrategy,
-      factory: _DefaultTitleStrategy.ɵfac,
-      providedIn: "root"
-    });
-  }
+  static ɵfac = function DefaultTitleStrategy_Factory(__ngFactoryType__) {
+    return new (__ngFactoryType__ || _DefaultTitleStrategy)(ɵɵinject(Title));
+  };
+  static ɵprov = ɵɵdefineInjectable({
+    token: _DefaultTitleStrategy,
+    factory: _DefaultTitleStrategy.ɵfac,
+    providedIn: "root"
+  });
 };
 (() => {
   (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(DefaultTitleStrategy, [{
@@ -3186,57 +3362,13 @@ var ROUTER_CONFIGURATION = new InjectionToken(typeof ngDevMode === "undefined" |
   providedIn: "root",
   factory: () => ({})
 });
-var ɵEmptyOutletComponent = class _ɵEmptyOutletComponent {
-  static {
-    this.ɵfac = function ɵEmptyOutletComponent_Factory(__ngFactoryType__) {
-      return new (__ngFactoryType__ || _ɵEmptyOutletComponent)();
-    };
-  }
-  static {
-    this.ɵcmp = ɵɵdefineComponent({
-      type: _ɵEmptyOutletComponent,
-      selectors: [["ng-component"]],
-      standalone: true,
-      features: [ɵɵStandaloneFeature],
-      decls: 1,
-      vars: 0,
-      template: function _EmptyOutletComponent_Template(rf, ctx) {
-        if (rf & 1) {
-          ɵɵelement(0, "router-outlet");
-        }
-      },
-      dependencies: [RouterOutlet],
-      encapsulation: 2
-    });
-  }
-};
-(() => {
-  (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(ɵEmptyOutletComponent, [{
-    type: Component,
-    args: [{
-      template: `<router-outlet></router-outlet>`,
-      imports: [RouterOutlet],
-      standalone: true
-    }]
-  }], null, null);
-})();
-function standardizeConfig(r) {
-  const children = r.children && r.children.map(standardizeConfig);
-  const c = children ? __spreadProps(__spreadValues({}, r), {
-    children
-  }) : __spreadValues({}, r);
-  if (!c.component && !c.loadComponent && (children || c.loadChildren) && c.outlet && c.outlet !== PRIMARY_OUTLET) {
-    c.component = ɵEmptyOutletComponent;
-  }
-  return c;
-}
 var ROUTES = new InjectionToken(ngDevMode ? "ROUTES" : "");
 var RouterConfigLoader = class _RouterConfigLoader {
-  constructor() {
-    this.componentLoaders = /* @__PURE__ */ new WeakMap();
-    this.childrenLoaders = /* @__PURE__ */ new WeakMap();
-    this.compiler = inject(Compiler);
-  }
+  componentLoaders = /* @__PURE__ */ new WeakMap();
+  childrenLoaders = /* @__PURE__ */ new WeakMap();
+  onLoadStartListener;
+  onLoadEndListener;
+  compiler = inject(Compiler);
   loadComponent(route) {
     if (this.componentLoaders.get(route)) {
       return this.componentLoaders.get(route);
@@ -3279,18 +3411,14 @@ var RouterConfigLoader = class _RouterConfigLoader {
     this.childrenLoaders.set(route, loader);
     return loader;
   }
-  static {
-    this.ɵfac = function RouterConfigLoader_Factory(__ngFactoryType__) {
-      return new (__ngFactoryType__ || _RouterConfigLoader)();
-    };
-  }
-  static {
-    this.ɵprov = ɵɵdefineInjectable({
-      token: _RouterConfigLoader,
-      factory: _RouterConfigLoader.ɵfac,
-      providedIn: "root"
-    });
-  }
+  static ɵfac = function RouterConfigLoader_Factory(__ngFactoryType__) {
+    return new (__ngFactoryType__ || _RouterConfigLoader)();
+  };
+  static ɵprov = ɵɵdefineInjectable({
+    token: _RouterConfigLoader,
+    factory: _RouterConfigLoader.ɵfac,
+    providedIn: "root"
+  });
 };
 (() => {
   (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(RouterConfigLoader, [{
@@ -3335,22 +3463,18 @@ function loadChildren(route, compiler, parentInjector, onLoadEndListener) {
 function isWrappedDefaultExport(value) {
   return value && typeof value === "object" && "default" in value;
 }
-function maybeUnwrapDefaultExport(input) {
-  return isWrappedDefaultExport(input) ? input["default"] : input;
+function maybeUnwrapDefaultExport(input2) {
+  return isWrappedDefaultExport(input2) ? input2["default"] : input2;
 }
 var UrlHandlingStrategy = class _UrlHandlingStrategy {
-  static {
-    this.ɵfac = function UrlHandlingStrategy_Factory(__ngFactoryType__) {
-      return new (__ngFactoryType__ || _UrlHandlingStrategy)();
-    };
-  }
-  static {
-    this.ɵprov = ɵɵdefineInjectable({
-      token: _UrlHandlingStrategy,
-      factory: () => (() => inject(DefaultUrlHandlingStrategy))(),
-      providedIn: "root"
-    });
-  }
+  static ɵfac = function UrlHandlingStrategy_Factory(__ngFactoryType__) {
+    return new (__ngFactoryType__ || _UrlHandlingStrategy)();
+  };
+  static ɵprov = ɵɵdefineInjectable({
+    token: _UrlHandlingStrategy,
+    factory: () => (() => inject(DefaultUrlHandlingStrategy))(),
+    providedIn: "root"
+  });
 };
 (() => {
   (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(UrlHandlingStrategy, [{
@@ -3371,18 +3495,14 @@ var DefaultUrlHandlingStrategy = class _DefaultUrlHandlingStrategy {
   merge(newUrlPart, wholeUrl) {
     return newUrlPart;
   }
-  static {
-    this.ɵfac = function DefaultUrlHandlingStrategy_Factory(__ngFactoryType__) {
-      return new (__ngFactoryType__ || _DefaultUrlHandlingStrategy)();
-    };
-  }
-  static {
-    this.ɵprov = ɵɵdefineInjectable({
-      token: _DefaultUrlHandlingStrategy,
-      factory: _DefaultUrlHandlingStrategy.ɵfac,
-      providedIn: "root"
-    });
-  }
+  static ɵfac = function DefaultUrlHandlingStrategy_Factory(__ngFactoryType__) {
+    return new (__ngFactoryType__ || _DefaultUrlHandlingStrategy)();
+  };
+  static ɵprov = ɵɵdefineInjectable({
+    token: _DefaultUrlHandlingStrategy,
+    factory: _DefaultUrlHandlingStrategy.ɵfac,
+    providedIn: "root"
+  });
 };
 (() => {
   (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(DefaultUrlHandlingStrategy, [{
@@ -3434,84 +3554,85 @@ function createRenderPromise(injector) {
 }
 var NAVIGATION_ERROR_HANDLER = new InjectionToken(typeof ngDevMode === "undefined" || ngDevMode ? "navigation error handler" : "");
 var NavigationTransitions = class _NavigationTransitions {
+  currentNavigation = null;
+  currentTransition = null;
+  lastSuccessfulNavigation = null;
+  /**
+   * These events are used to communicate back to the Router about the state of the transition. The
+   * Router wants to respond to these events in various ways. Because the `NavigationTransition`
+   * class is not public, this event subject is not publicly exposed.
+   */
+  events = new Subject();
+  /**
+   * Used to abort the current transition with an error.
+   */
+  transitionAbortSubject = new Subject();
+  configLoader = inject(RouterConfigLoader);
+  environmentInjector = inject(EnvironmentInjector);
+  destroyRef = inject(DestroyRef);
+  urlSerializer = inject(UrlSerializer);
+  rootContexts = inject(ChildrenOutletContexts);
+  location = inject(Location);
+  inputBindingEnabled = inject(INPUT_BINDER, {
+    optional: true
+  }) !== null;
+  titleStrategy = inject(TitleStrategy);
+  options = inject(ROUTER_CONFIGURATION, {
+    optional: true
+  }) || {};
+  paramsInheritanceStrategy = this.options.paramsInheritanceStrategy || "emptyOnly";
+  urlHandlingStrategy = inject(UrlHandlingStrategy);
+  createViewTransition = inject(CREATE_VIEW_TRANSITION, {
+    optional: true
+  });
+  navigationErrorHandler = inject(NAVIGATION_ERROR_HANDLER, {
+    optional: true
+  });
+  navigationId = 0;
   get hasRequestedNavigation() {
     return this.navigationId !== 0;
   }
+  transitions;
+  /**
+   * Hook that enables you to pause navigation after the preactivation phase.
+   * Used by `RouterModule`.
+   *
+   * @internal
+   */
+  afterPreactivation = () => of(void 0);
+  /** @internal */
+  rootComponentType = null;
+  destroyed = false;
   constructor() {
-    this.currentNavigation = null;
-    this.currentTransition = null;
-    this.lastSuccessfulNavigation = null;
-    this.events = new Subject();
-    this.transitionAbortSubject = new Subject();
-    this.configLoader = inject(RouterConfigLoader);
-    this.environmentInjector = inject(EnvironmentInjector);
-    this.urlSerializer = inject(UrlSerializer);
-    this.rootContexts = inject(ChildrenOutletContexts);
-    this.location = inject(Location);
-    this.inputBindingEnabled = inject(INPUT_BINDER, {
-      optional: true
-    }) !== null;
-    this.titleStrategy = inject(TitleStrategy);
-    this.options = inject(ROUTER_CONFIGURATION, {
-      optional: true
-    }) || {};
-    this.paramsInheritanceStrategy = this.options.paramsInheritanceStrategy || "emptyOnly";
-    this.urlHandlingStrategy = inject(UrlHandlingStrategy);
-    this.createViewTransition = inject(CREATE_VIEW_TRANSITION, {
-      optional: true
-    });
-    this.navigationErrorHandler = inject(NAVIGATION_ERROR_HANDLER, {
-      optional: true
-    });
-    this.navigationId = 0;
-    this.afterPreactivation = () => of(void 0);
-    this.rootComponentType = null;
     const onLoadStart = (r) => this.events.next(new RouteConfigLoadStart(r));
     const onLoadEnd = (r) => this.events.next(new RouteConfigLoadEnd(r));
     this.configLoader.onLoadEndListener = onLoadEnd;
     this.configLoader.onLoadStartListener = onLoadStart;
+    this.destroyRef.onDestroy(() => {
+      this.destroyed = true;
+    });
   }
   complete() {
     this.transitions?.complete();
   }
   handleNavigationRequest(request) {
     const id = ++this.navigationId;
-    this.transitions?.next(__spreadProps(__spreadValues(__spreadValues({}, this.transitions.value), request), {
-      id
-    }));
-  }
-  setupNavigations(router, initialUrlTree, initialRouterState) {
-    this.transitions = new BehaviorSubject({
-      id: 0,
-      currentUrlTree: initialUrlTree,
-      currentRawUrl: initialUrlTree,
-      extractedUrl: this.urlHandlingStrategy.extract(initialUrlTree),
-      urlAfterRedirects: this.urlHandlingStrategy.extract(initialUrlTree),
-      rawUrl: initialUrlTree,
-      extras: {},
-      resolve: () => {
-      },
-      reject: () => {
-      },
-      promise: Promise.resolve(true),
-      source: IMPERATIVE_NAVIGATION,
-      restoredState: null,
-      currentSnapshot: initialRouterState.snapshot,
+    this.transitions?.next(__spreadProps(__spreadValues({}, request), {
+      extractedUrl: this.urlHandlingStrategy.extract(request.rawUrl),
       targetSnapshot: null,
-      currentRouterState: initialRouterState,
       targetRouterState: null,
       guards: {
         canActivateChecks: [],
         canDeactivateChecks: []
       },
-      guardsResult: null
-    });
+      guardsResult: null,
+      id
+    }));
+  }
+  setupNavigations(router) {
+    this.transitions = new BehaviorSubject(null);
     return this.transitions.pipe(
-      filter((t) => t.id !== 0),
-      // Extract URL
-      map((t) => __spreadProps(__spreadValues({}, t), {
-        extractedUrl: this.urlHandlingStrategy.extract(t.rawUrl)
-      })),
+      filter((t) => t !== null),
       // Using switchMap so we cancel executing navigations when a new one comes in
       switchMap((overallTransitionState) => {
         let completed = false;
@@ -3547,9 +3668,8 @@ var NavigationTransitions = class _NavigationTransitions {
               return of(t).pipe(
                 // Fire NavigationStart event
                 switchMap((t2) => {
-                  const transition = this.transitions?.getValue();
                   this.events.next(new NavigationStart(t2.id, this.urlSerializer.serialize(t2.extractedUrl), t2.source, t2.restoredState));
-                  if (transition !== this.transitions?.getValue()) {
+                  if (t2.id !== this.navigationId) {
                     return EMPTY;
                   }
                   return Promise.resolve(t2);
@@ -3624,26 +3744,26 @@ var NavigationTransitions = class _NavigationTransitions {
           }),
           // --- RESOLVE ---
           switchTap((t) => {
-            if (t.guards.canActivateChecks.length) {
-              return of(t).pipe(tap((t2) => {
-                const resolveStart = new ResolveStart(t2.id, this.urlSerializer.serialize(t2.extractedUrl), this.urlSerializer.serialize(t2.urlAfterRedirects), t2.targetSnapshot);
-                this.events.next(resolveStart);
-              }), switchMap((t2) => {
-                let dataResolved = false;
-                return of(t2).pipe(resolveData(this.paramsInheritanceStrategy, this.environmentInjector), tap({
-                  next: () => dataResolved = true,
-                  complete: () => {
-                    if (!dataResolved) {
-                      this.cancelNavigationTransition(t2, typeof ngDevMode === "undefined" || ngDevMode ? `At least one route resolver didn't emit any value.` : "", NavigationCancellationCode.NoDataFromResolver);
-                    }
-                  }
-                }));
-              }), tap((t2) => {
-                const resolveEnd = new ResolveEnd(t2.id, this.urlSerializer.serialize(t2.extractedUrl), this.urlSerializer.serialize(t2.urlAfterRedirects), t2.targetSnapshot);
-                this.events.next(resolveEnd);
-              }));
+            if (t.guards.canActivateChecks.length === 0) {
+              return void 0;
             }
-            return void 0;
+            return of(t).pipe(tap((t2) => {
+              const resolveStart = new ResolveStart(t2.id, this.urlSerializer.serialize(t2.extractedUrl), this.urlSerializer.serialize(t2.urlAfterRedirects), t2.targetSnapshot);
+              this.events.next(resolveStart);
+            }), switchMap((t2) => {
+              let dataResolved = false;
+              return of(t2).pipe(resolveData(this.paramsInheritanceStrategy, this.environmentInjector), tap({
+                next: () => dataResolved = true,
+                complete: () => {
+                  if (!dataResolved) {
+                    this.cancelNavigationTransition(t2, typeof ngDevMode === "undefined" || ngDevMode ? `At least one route resolver didn't emit any value.` : "", NavigationCancellationCode.NoDataFromResolver);
+                  }
+                }
+              }));
+            }), tap((t2) => {
+              const resolveEnd = new ResolveEnd(t2.id, this.urlSerializer.serialize(t2.extractedUrl), this.urlSerializer.serialize(t2.urlAfterRedirects), t2.targetSnapshot);
+              this.events.next(resolveEnd);
+            }));
           }),
           // --- LOAD COMPONENTS ---
           switchTap((t) => {
@@ -3719,6 +3839,10 @@ var NavigationTransitions = class _NavigationTransitions {
             }
           }),
           catchError((e) => {
+            if (this.destroyed) {
+              overallTransitionState.resolve(false);
+              return EMPTY;
+            }
             errored = true;
             if (isNavigationCancelingError(e)) {
               this.events.next(new NavigationCancel(overallTransitionState.id, this.urlSerializer.serialize(overallTransitionState.extractedUrl), e.message, e.cancellationCode));
@@ -3740,8 +3864,7 @@ var NavigationTransitions = class _NavigationTransitions {
                   this.events.next(new RedirectRequest(navigationErrorHandlerResult.redirectTo, navigationErrorHandlerResult.navigationBehaviorOptions));
                 } else {
                   this.events.next(navigationError);
-                  const errorHandlerResult = router.errorHandler(e);
-                  overallTransitionState.resolve(!!errorHandlerResult);
+                  throw e;
                 }
               } catch (ee) {
                 if (this.options.resolveNavigationPromiseOnError) {
@@ -3779,18 +3902,14 @@ var NavigationTransitions = class _NavigationTransitions {
     const targetBrowserUrl = this.currentNavigation?.targetBrowserUrl ?? this.currentNavigation?.extractedUrl;
     return currentBrowserUrl.toString() !== targetBrowserUrl?.toString() && !this.currentNavigation?.extras.skipLocationChange;
   }
-  static {
-    this.ɵfac = function NavigationTransitions_Factory(__ngFactoryType__) {
-      return new (__ngFactoryType__ || _NavigationTransitions)();
-    };
-  }
-  static {
-    this.ɵprov = ɵɵdefineInjectable({
-      token: _NavigationTransitions,
-      factory: _NavigationTransitions.ɵfac,
-      providedIn: "root"
-    });
-  }
+  static ɵfac = function NavigationTransitions_Factory(__ngFactoryType__) {
+    return new (__ngFactoryType__ || _NavigationTransitions)();
+  };
+  static ɵprov = ɵɵdefineInjectable({
+    token: _NavigationTransitions,
+    factory: _NavigationTransitions.ɵfac,
+    providedIn: "root"
+  });
 };
 (() => {
   (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(NavigationTransitions, [{
@@ -3804,18 +3923,14 @@ function isBrowserTriggeredNavigation(source) {
   return source !== IMPERATIVE_NAVIGATION;
 }
 var RouteReuseStrategy = class _RouteReuseStrategy {
-  static {
-    this.ɵfac = function RouteReuseStrategy_Factory(__ngFactoryType__) {
-      return new (__ngFactoryType__ || _RouteReuseStrategy)();
-    };
-  }
-  static {
-    this.ɵprov = ɵɵdefineInjectable({
-      token: _RouteReuseStrategy,
-      factory: () => (() => inject(DefaultRouteReuseStrategy))(),
-      providedIn: "root"
-    });
-  }
+  static ɵfac = function RouteReuseStrategy_Factory(__ngFactoryType__) {
+    return new (__ngFactoryType__ || _RouteReuseStrategy)();
+  };
+  static ɵprov = ɵɵdefineInjectable({
+    token: _RouteReuseStrategy,
+    factory: () => (() => inject(DefaultRouteReuseStrategy))(),
+    providedIn: "root"
+  });
 };
 (() => {
   (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(RouteReuseStrategy, [{
@@ -3857,21 +3972,17 @@ var BaseRouteReuseStrategy = class {
   }
 };
 var DefaultRouteReuseStrategy = class _DefaultRouteReuseStrategy extends BaseRouteReuseStrategy {
-  static {
-    this.ɵfac = /* @__PURE__ */ (() => {
-      let ɵDefaultRouteReuseStrategy_BaseFactory;
-      return function DefaultRouteReuseStrategy_Factory(__ngFactoryType__) {
-        return (ɵDefaultRouteReuseStrategy_BaseFactory || (ɵDefaultRouteReuseStrategy_BaseFactory = ɵɵgetInheritedFactory(_DefaultRouteReuseStrategy)))(__ngFactoryType__ || _DefaultRouteReuseStrategy);
-      };
-    })();
-  }
-  static {
-    this.ɵprov = ɵɵdefineInjectable({
-      token: _DefaultRouteReuseStrategy,
-      factory: _DefaultRouteReuseStrategy.ɵfac,
-      providedIn: "root"
-    });
-  }
+  static ɵfac = /* @__PURE__ */ (() => {
+    let ɵDefaultRouteReuseStrategy_BaseFactory;
+    return function DefaultRouteReuseStrategy_Factory(__ngFactoryType__) {
+      return (ɵDefaultRouteReuseStrategy_BaseFactory || (ɵDefaultRouteReuseStrategy_BaseFactory = ɵɵgetInheritedFactory(_DefaultRouteReuseStrategy)))(__ngFactoryType__ || _DefaultRouteReuseStrategy);
+    };
+  })();
+  static ɵprov = ɵɵdefineInjectable({
+    token: _DefaultRouteReuseStrategy,
+    factory: _DefaultRouteReuseStrategy.ɵfac,
+    providedIn: "root"
+  });
 };
 (() => {
   (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(DefaultRouteReuseStrategy, [{
@@ -3882,18 +3993,110 @@ var DefaultRouteReuseStrategy = class _DefaultRouteReuseStrategy extends BaseRou
   }], null, null);
 })();
 var StateManager = class _StateManager {
-  static {
-    this.ɵfac = function StateManager_Factory(__ngFactoryType__) {
-      return new (__ngFactoryType__ || _StateManager)();
+  urlSerializer = inject(UrlSerializer);
+  options = inject(ROUTER_CONFIGURATION, {
+    optional: true
+  }) || {};
+  canceledNavigationResolution = this.options.canceledNavigationResolution || "replace";
+  location = inject(Location);
+  urlHandlingStrategy = inject(UrlHandlingStrategy);
+  urlUpdateStrategy = this.options.urlUpdateStrategy || "deferred";
+  currentUrlTree = new UrlTree();
+  /**
+   * Returns the currently activated `UrlTree`.
+   *
+   * This `UrlTree` shows only URLs that the `Router` is configured to handle (through
+   * `UrlHandlingStrategy`).
+   *
+   * The value is set after finding the route config tree to activate but before activating the
+   * route.
+   */
+  getCurrentUrlTree() {
+    return this.currentUrlTree;
+  }
+  rawUrlTree = this.currentUrlTree;
+  /**
+   * Returns a `UrlTree` that is represents what the browser is actually showing.
+   *
+   * In the life of a navigation transition:
+   * 1. When a navigation begins, the raw `UrlTree` is updated to the full URL that's being
+   * navigated to.
+   * 2. During a navigation, redirects are applied, which might only apply to _part_ of the URL (due
+   * to `UrlHandlingStrategy`).
+   * 3. Just before activation, the raw `UrlTree` is updated to include the redirects on top of the
+   * original raw URL.
+   *
+   * Note that this is _only_ here to support `UrlHandlingStrategy.extract` and
+   * `UrlHandlingStrategy.shouldProcessUrl`. Without those APIs, the current `UrlTree` would not
+   * deviated from the raw `UrlTree`.
+   *
+   * For `extract`, a raw `UrlTree` is needed because `extract` may only return part
+   * of the navigation URL. Thus, the current `UrlTree` may only represent _part_ of the browser
+   * URL. When a navigation gets cancelled and the router needs to reset the URL or a new navigation
+   * occurs, it needs to know the _whole_ browser URL, not just the part handled by
+   * `UrlHandlingStrategy`.
+   * For `shouldProcessUrl`, when the return is `false`, the router ignores the navigation but
+   * still updates the raw `UrlTree` with the assumption that the navigation was caused by the
+   * location change listener due to a URL update by the AngularJS router. In this case, the router
+   * still need to know what the browser's URL is for future navigations.
+   */
+  getRawUrlTree() {
+    return this.rawUrlTree;
+  }
+  createBrowserPath({
+    finalUrl,
+    initialUrl,
+    targetBrowserUrl
+  }) {
+    const rawUrl = finalUrl !== void 0 ? this.urlHandlingStrategy.merge(finalUrl, initialUrl) : initialUrl;
+    const url = targetBrowserUrl ?? rawUrl;
+    const path = url instanceof UrlTree ? this.urlSerializer.serialize(url) : url;
+    return path;
+  }
+  commitTransition({
+    targetRouterState,
+    finalUrl,
+    initialUrl
+  }) {
+    if (finalUrl && targetRouterState) {
+      this.currentUrlTree = finalUrl;
+      this.rawUrlTree = this.urlHandlingStrategy.merge(finalUrl, initialUrl);
+      this.routerState = targetRouterState;
+    } else {
+      this.rawUrlTree = initialUrl;
+    }
+  }
+  routerState = createEmptyState(null);
+  /** Returns the current RouterState. */
+  getRouterState() {
+    return this.routerState;
+  }
+  stateMemento = this.createStateMemento();
+  updateStateMemento() {
+    this.stateMemento = this.createStateMemento();
+  }
+  createStateMemento() {
+    return {
+      rawUrlTree: this.rawUrlTree,
+      currentUrlTree: this.currentUrlTree,
+      routerState: this.routerState
     };
   }
-  static {
-    this.ɵprov = ɵɵdefineInjectable({
-      token: _StateManager,
-      factory: () => (() => inject(HistoryStateManager))(),
-      providedIn: "root"
-    });
+  resetInternalState({
+    finalUrl
+  }) {
+    this.routerState = this.stateMemento.routerState;
+    this.currentUrlTree = this.stateMemento.currentUrlTree;
+    this.rawUrlTree = this.urlHandlingStrategy.merge(this.currentUrlTree, finalUrl ?? this.rawUrlTree);
   }
+  static ɵfac = function StateManager_Factory(__ngFactoryType__) {
+    return new (__ngFactoryType__ || _StateManager)();
+  };
+  static ɵprov = ɵɵdefineInjectable({
+    token: _StateManager,
+    factory: () => (() => inject(HistoryStateManager))(),
+    providedIn: "root"
+  });
 };
 (() => {
   (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(StateManager, [{
@@ -3905,29 +4108,16 @@ var StateManager = class _StateManager {
   }], null, null);
 })();
 var HistoryStateManager = class _HistoryStateManager extends StateManager {
-  constructor() {
-    super(...arguments);
-    this.location = inject(Location);
-    this.urlSerializer = inject(UrlSerializer);
-    this.options = inject(ROUTER_CONFIGURATION, {
-      optional: true
-    }) || {};
-    this.canceledNavigationResolution = this.options.canceledNavigationResolution || "replace";
-    this.urlHandlingStrategy = inject(UrlHandlingStrategy);
-    this.urlUpdateStrategy = this.options.urlUpdateStrategy || "deferred";
-    this.currentUrlTree = new UrlTree();
-    this.rawUrlTree = this.currentUrlTree;
-    this.currentPageId = 0;
-    this.lastSuccessfulId = -1;
-    this.routerState = createEmptyState(null);
-    this.stateMemento = this.createStateMemento();
-  }
-  getCurrentUrlTree() {
-    return this.currentUrlTree;
-  }
-  getRawUrlTree() {
-    return this.rawUrlTree;
-  }
+  /**
+   * The id of the currently active page in the router.
+   * Updated to the transition's target id on a successful navigation.
+   *
+   * This is used to track what page the router last activated. When an attempted navigation fails,
+   * the router can then use this to compute how to restore the state back to the previously active
+   * page.
+   */
+  currentPageId = 0;
+  lastSuccessfulId = -1;
   restoredState() {
     return this.location.getState();
   }
@@ -3942,41 +4132,30 @@ var HistoryStateManager = class _HistoryStateManager extends StateManager {
     }
     return this.restoredState()?.ɵrouterPageId ?? this.currentPageId;
   }
-  getRouterState() {
-    return this.routerState;
-  }
-  createStateMemento() {
-    return {
-      rawUrlTree: this.rawUrlTree,
-      currentUrlTree: this.currentUrlTree,
-      routerState: this.routerState
-    };
-  }
   registerNonRouterCurrentEntryChangeListener(listener) {
     return this.location.subscribe((event) => {
       if (event["type"] === "popstate") {
-        listener(event["url"], event.state);
+        setTimeout(() => {
+          listener(event["url"], event.state, "popstate");
+        });
       }
     });
   }
   handleRouterEvent(e, currentTransition) {
     if (e instanceof NavigationStart) {
-      this.stateMemento = this.createStateMemento();
+      this.updateStateMemento();
     } else if (e instanceof NavigationSkipped) {
-      this.rawUrlTree = currentTransition.initialUrl;
+      this.commitTransition(currentTransition);
     } else if (e instanceof RoutesRecognized) {
       if (this.urlUpdateStrategy === "eager") {
         if (!currentTransition.extras.skipLocationChange) {
-          const rawUrl = this.urlHandlingStrategy.merge(currentTransition.finalUrl, currentTransition.initialUrl);
-          this.setBrowserUrl(currentTransition.targetBrowserUrl ?? rawUrl, currentTransition);
+          this.setBrowserUrl(this.createBrowserPath(currentTransition), currentTransition);
         }
       }
     } else if (e instanceof BeforeActivateRoutes) {
-      this.currentUrlTree = currentTransition.finalUrl;
-      this.rawUrlTree = this.urlHandlingStrategy.merge(currentTransition.finalUrl, currentTransition.initialUrl);
-      this.routerState = currentTransition.targetRouterState;
+      this.commitTransition(currentTransition);
       if (this.urlUpdateStrategy === "deferred" && !currentTransition.extras.skipLocationChange) {
-        this.setBrowserUrl(currentTransition.targetBrowserUrl ?? this.rawUrlTree, currentTransition);
+        this.setBrowserUrl(this.createBrowserPath(currentTransition), currentTransition);
       }
     } else if (e instanceof NavigationCancel && (e.code === NavigationCancellationCode.GuardRejected || e.code === NavigationCancellationCode.NoDataFromResolver)) {
       this.restoreHistory(currentTransition);
@@ -3987,15 +4166,21 @@ var HistoryStateManager = class _HistoryStateManager extends StateManager {
       this.currentPageId = this.browserPageId;
     }
   }
-  setBrowserUrl(url, transition) {
-    const path = url instanceof UrlTree ? this.urlSerializer.serialize(url) : url;
-    if (this.location.isCurrentPathEqualTo(path) || !!transition.extras.replaceUrl) {
+  setBrowserUrl(path, {
+    extras,
+    id
+  }) {
+    const {
+      replaceUrl,
+      state
+    } = extras;
+    if (this.location.isCurrentPathEqualTo(path) || !!replaceUrl) {
       const currentBrowserPageId = this.browserPageId;
-      const state = __spreadValues(__spreadValues({}, transition.extras.state), this.generateNgRouterState(transition.id, currentBrowserPageId));
-      this.location.replaceState(path, "", state);
+      const newState = __spreadValues(__spreadValues({}, state), this.generateNgRouterState(id, currentBrowserPageId));
+      this.location.replaceState(path, "", newState);
     } else {
-      const state = __spreadValues(__spreadValues({}, transition.extras.state), this.generateNgRouterState(transition.id, this.browserPageId + 1));
-      this.location.go(path, "", state);
+      const newState = __spreadValues(__spreadValues({}, state), this.generateNgRouterState(id, this.browserPageId + 1));
+      this.location.go(path, "", newState);
     }
   }
   /**
@@ -4008,25 +4193,19 @@ var HistoryStateManager = class _HistoryStateManager extends StateManager {
       const targetPagePosition = this.currentPageId - currentBrowserPageId;
       if (targetPagePosition !== 0) {
         this.location.historyGo(targetPagePosition);
-      } else if (this.currentUrlTree === navigation.finalUrl && targetPagePosition === 0) {
-        this.resetState(navigation);
+      } else if (this.getCurrentUrlTree() === navigation.finalUrl && targetPagePosition === 0) {
+        this.resetInternalState(navigation);
         this.resetUrlToCurrentUrlTree();
-      } else {
-      }
+      } else ;
     } else if (this.canceledNavigationResolution === "replace") {
       if (restoringFromCaughtError) {
-        this.resetState(navigation);
+        this.resetInternalState(navigation);
       }
       this.resetUrlToCurrentUrlTree();
     }
   }
-  resetState(navigation) {
-    this.routerState = this.stateMemento.routerState;
-    this.currentUrlTree = this.stateMemento.currentUrlTree;
-    this.rawUrlTree = this.urlHandlingStrategy.merge(this.currentUrlTree, navigation.finalUrl ?? this.rawUrlTree);
-  }
   resetUrlToCurrentUrlTree() {
-    this.location.replaceState(this.urlSerializer.serialize(this.rawUrlTree), "", this.generateNgRouterState(this.lastSuccessfulId, this.currentPageId));
+    this.location.replaceState(this.urlSerializer.serialize(this.getRawUrlTree()), "", this.generateNgRouterState(this.lastSuccessfulId, this.currentPageId));
   }
   generateNgRouterState(navigationId, routerPageId) {
     if (this.canceledNavigationResolution === "computed") {
@@ -4039,21 +4218,17 @@ var HistoryStateManager = class _HistoryStateManager extends StateManager {
       navigationId
     };
   }
-  static {
-    this.ɵfac = /* @__PURE__ */ (() => {
-      let ɵHistoryStateManager_BaseFactory;
-      return function HistoryStateManager_Factory(__ngFactoryType__) {
-        return (ɵHistoryStateManager_BaseFactory || (ɵHistoryStateManager_BaseFactory = ɵɵgetInheritedFactory(_HistoryStateManager)))(__ngFactoryType__ || _HistoryStateManager);
-      };
-    })();
-  }
-  static {
-    this.ɵprov = ɵɵdefineInjectable({
-      token: _HistoryStateManager,
-      factory: _HistoryStateManager.ɵfac,
-      providedIn: "root"
-    });
-  }
+  static ɵfac = /* @__PURE__ */ (() => {
+    let ɵHistoryStateManager_BaseFactory;
+    return function HistoryStateManager_Factory(__ngFactoryType__) {
+      return (ɵHistoryStateManager_BaseFactory || (ɵHistoryStateManager_BaseFactory = ɵɵgetInheritedFactory(_HistoryStateManager)))(__ngFactoryType__ || _HistoryStateManager);
+    };
+  })();
+  static ɵprov = ɵɵdefineInjectable({
+    token: _HistoryStateManager,
+    factory: _HistoryStateManager.ɵfac,
+    providedIn: "root"
+  });
 };
 (() => {
   (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(HistoryStateManager, [{
@@ -4063,25 +4238,19 @@ var HistoryStateManager = class _HistoryStateManager extends StateManager {
     }]
   }], null, null);
 })();
-var NavigationResult;
-(function(NavigationResult2) {
-  NavigationResult2[NavigationResult2["COMPLETE"] = 0] = "COMPLETE";
-  NavigationResult2[NavigationResult2["FAILED"] = 1] = "FAILED";
-  NavigationResult2[NavigationResult2["REDIRECTING"] = 2] = "REDIRECTING";
-})(NavigationResult || (NavigationResult = {}));
 function afterNextNavigation(router, action) {
   router.events.pipe(filter((e) => e instanceof NavigationEnd || e instanceof NavigationCancel || e instanceof NavigationError || e instanceof NavigationSkipped), map((e) => {
     if (e instanceof NavigationEnd || e instanceof NavigationSkipped) {
-      return NavigationResult.COMPLETE;
+      return 0;
     }
     const redirecting = e instanceof NavigationCancel ? e.code === NavigationCancellationCode.Redirect || e.code === NavigationCancellationCode.SupersededByNewNavigation : false;
-    return redirecting ? NavigationResult.REDIRECTING : NavigationResult.FAILED;
-  }), filter((result) => result !== NavigationResult.REDIRECTING), take(1)).subscribe(() => {
+    return redirecting ? 2 : 1;
+  }), filter(
+    (result) => result !== 2
+    /* NavigationResult.REDIRECTING */
+  ), take(1)).subscribe(() => {
     action();
   });
-}
-function defaultErrorHandler(error) {
-  throw error;
 }
 var exactMatchOptions = {
   paths: "exact",
@@ -4102,6 +4271,25 @@ var Router = class _Router {
   get rawUrlTree() {
     return this.stateManager.getRawUrlTree();
   }
+  disposed = false;
+  nonRouterCurrentEntryChangeSubscription;
+  console = inject(Console);
+  stateManager = inject(StateManager);
+  options = inject(ROUTER_CONFIGURATION, {
+    optional: true
+  }) || {};
+  pendingTasks = inject(PendingTasksInternal);
+  urlUpdateStrategy = this.options.urlUpdateStrategy || "deferred";
+  navigationTransitions = inject(NavigationTransitions);
+  urlSerializer = inject(UrlSerializer);
+  location = inject(Location);
+  urlHandlingStrategy = inject(UrlHandlingStrategy);
+  /**
+   * The private `Subject` type for the public events exposed in the getter. This is used internally
+   * to push events to. The separate field allows us to expose separate types in the public API
+   * (i.e., an Observable rather than the Subject).
+   */
+  _events = new Subject();
   /**
    * An event stream for routing events.
    */
@@ -4114,39 +4302,50 @@ var Router = class _Router {
   get routerState() {
     return this.stateManager.getRouterState();
   }
+  /**
+   * True if at least one navigation event has occurred,
+   * false otherwise.
+   */
+  navigated = false;
+  /**
+   * A strategy for re-using routes.
+   *
+   * @deprecated Configure using `providers` instead:
+   *   `{provide: RouteReuseStrategy, useClass: MyStrategy}`.
+   */
+  routeReuseStrategy = inject(RouteReuseStrategy);
+  /**
+   * How to handle a navigation request to the current URL.
+   *
+   *
+   * @deprecated Configure this through `provideRouter` or `RouterModule.forRoot` instead.
+   * @see {@link withRouterConfig}
+   * @see {@link provideRouter}
+   * @see {@link RouterModule}
+   */
+  onSameUrlNavigation = this.options.onSameUrlNavigation || "ignore";
+  config = inject(ROUTES, {
+    optional: true
+  })?.flat() ?? [];
+  /**
+   * Indicates whether the application has opted in to binding Router data to component inputs.
+   *
+   * This option is enabled by the `withComponentInputBinding` feature of `provideRouter` or
+   * `bindToComponentInputs` in the `ExtraOptions` of `RouterModule.forRoot`.
+   */
+  componentInputBindingEnabled = !!inject(INPUT_BINDER, {
+    optional: true
+  });
   constructor() {
-    this.disposed = false;
-    this.console = inject(Console);
-    this.stateManager = inject(StateManager);
-    this.options = inject(ROUTER_CONFIGURATION, {
-      optional: true
-    }) || {};
-    this.pendingTasks = inject(PendingTasks);
-    this.urlUpdateStrategy = this.options.urlUpdateStrategy || "deferred";
-    this.navigationTransitions = inject(NavigationTransitions);
-    this.urlSerializer = inject(UrlSerializer);
-    this.location = inject(Location);
-    this.urlHandlingStrategy = inject(UrlHandlingStrategy);
-    this._events = new Subject();
-    this.errorHandler = this.options.errorHandler || defaultErrorHandler;
-    this.navigated = false;
-    this.routeReuseStrategy = inject(RouteReuseStrategy);
-    this.onSameUrlNavigation = this.options.onSameUrlNavigation || "ignore";
-    this.config = inject(ROUTES, {
-      optional: true
-    })?.flat() ?? [];
-    this.componentInputBindingEnabled = !!inject(INPUT_BINDER, {
-      optional: true
-    });
-    this.eventsSubscription = new Subscription();
     this.resetConfig(this.config);
-    this.navigationTransitions.setupNavigations(this, this.currentUrlTree, this.routerState).subscribe({
+    this.navigationTransitions.setupNavigations(this).subscribe({
       error: (e) => {
         this.console.warn(ngDevMode ? `Unhandled Navigation Error: ${e}` : e);
       }
     });
     this.subscribeToNavigationEvents();
   }
+  eventsSubscription = new Subscription();
   subscribeToNavigationEvents() {
     const subscription = this.navigationTransitions.events.subscribe((e) => {
       try {
@@ -4207,10 +4406,8 @@ var Router = class _Router {
    * navigation so that the correct events, guards, etc. are triggered.
    */
   setUpLocationChangeListener() {
-    this.nonRouterCurrentEntryChangeSubscription ??= this.stateManager.registerNonRouterCurrentEntryChangeListener((url, state) => {
-      setTimeout(() => {
-        this.navigateToSyncWithBrowser(url, "popstate", state);
-      }, 0);
+    this.nonRouterCurrentEntryChangeSubscription ??= this.stateManager.registerNonRouterCurrentEntryChangeListener((url, state, source) => {
+      this.navigateToSyncWithBrowser(url, source, state);
     });
   }
   /**
@@ -4261,7 +4458,7 @@ var Router = class _Router {
    *
    * @usageNotes
    *
-   * ```
+   * ```ts
    * router.resetConfig([
    *  { path: 'team/:id', component: TeamCmp, children: [
    *    { path: 'simple', component: SimpleCmp },
@@ -4275,12 +4472,13 @@ var Router = class _Router {
     this.config = config.map(standardizeConfig);
     this.navigated = false;
   }
-  /** @nodoc */
+  /** @docs-private */
   ngOnDestroy() {
     this.dispose();
   }
   /** Disposes of the router. */
   dispose() {
+    this._events.unsubscribe();
     this.navigationTransitions.complete();
     if (this.nonRouterCurrentEntryChangeSubscription) {
       this.nonRouterCurrentEntryChangeSubscription.unsubscribe();
@@ -4386,7 +4584,7 @@ var Router = class _Router {
    *
    * The following calls request navigation to an absolute path.
    *
-   * ```
+   * ```ts
    * router.navigateByUrl("/team/33/user/11");
    *
    * // Navigate without updating the URL
@@ -4423,7 +4621,7 @@ var Router = class _Router {
    *
    * The following calls request navigation to a dynamic route path relative to the current URL.
    *
-   * ```
+   * ```ts
    * router.navigate(['team', 33, 'user', 11], {relativeTo: route});
    *
    * // Navigate without updating the URL, overriding the default behavior
@@ -4512,18 +4710,14 @@ var Router = class _Router {
       return Promise.reject(e);
     });
   }
-  static {
-    this.ɵfac = function Router_Factory(__ngFactoryType__) {
-      return new (__ngFactoryType__ || _Router)();
-    };
-  }
-  static {
-    this.ɵprov = ɵɵdefineInjectable({
-      token: _Router,
-      factory: _Router.ɵfac,
-      providedIn: "root"
-    });
-  }
+  static ɵfac = function Router_Factory(__ngFactoryType__) {
+    return new (__ngFactoryType__ || _Router)();
+  };
+  static ɵprov = ɵɵdefineInjectable({
+    token: _Router,
+    factory: _Router.ɵfac,
+    providedIn: "root"
+  });
 };
 (() => {
   (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(Router, [{
@@ -4544,7 +4738,75 @@ function validateCommands(commands) {
 function isPublicRouterEvent(e) {
   return !(e instanceof BeforeActivateRoutes) && !(e instanceof RedirectRequest);
 }
+
+// node_modules/@angular/router/fesm2022/router_module-DTJgGWLd.mjs
 var RouterLink = class _RouterLink {
+  router;
+  route;
+  tabIndexAttribute;
+  renderer;
+  el;
+  locationStrategy;
+  /**
+   * Represents an `href` attribute value applied to a host element,
+   * when a host element is `<a>`. For other tags, the value is `null`.
+   */
+  href = null;
+  /**
+   * Represents the `target` attribute on a host element.
+   * This is only used when the host element is an `<a>` tag.
+   */
+  target;
+  /**
+   * Passed to {@link Router#createUrlTree} as part of the
+   * `UrlCreationOptions`.
+   * @see {@link UrlCreationOptions#queryParams}
+   * @see {@link Router#createUrlTree}
+   */
+  queryParams;
+  /**
+   * Passed to {@link Router#createUrlTree} as part of the
+   * `UrlCreationOptions`.
+   * @see {@link UrlCreationOptions#fragment}
+   * @see {@link Router#createUrlTree}
+   */
+  fragment;
+  /**
+   * Passed to {@link Router#createUrlTree} as part of the
+   * `UrlCreationOptions`.
+   * @see {@link UrlCreationOptions#queryParamsHandling}
+   * @see {@link Router#createUrlTree}
+   */
+  queryParamsHandling;
+  /**
+   * Passed to {@link Router#navigateByUrl} as part of the
+   * `NavigationBehaviorOptions`.
+   * @see {@link NavigationBehaviorOptions#state}
+   * @see {@link Router#navigateByUrl}
+   */
+  state;
+  /**
+   * Passed to {@link Router#navigateByUrl} as part of the
+   * `NavigationBehaviorOptions`.
+   * @see {@link NavigationBehaviorOptions#info}
+   * @see {@link Router#navigateByUrl}
+   */
+  info;
+  /**
+   * Passed to {@link Router#createUrlTree} as part of the
+   * `UrlCreationOptions`.
+   * Specify a value here when you do not want to use the default value
+   * for `routerLink`, which is the current activated route.
+   * Note that a value of `undefined` here will use the `routerLink` default.
+   * @see {@link UrlCreationOptions#relativeTo}
+   * @see {@link Router#createUrlTree}
+   */
+  relativeTo;
+  /** Whether a host element is an `<a>` tag. */
+  isAnchorElement;
+  subscription;
+  /** @internal */
+  onChanges = new Subject();
   constructor(router, route, tabIndexAttribute, renderer, el, locationStrategy) {
     this.router = router;
     this.route = route;
@@ -4552,12 +4814,6 @@ var RouterLink = class _RouterLink {
     this.renderer = renderer;
     this.el = el;
     this.locationStrategy = locationStrategy;
-    this.href = null;
-    this.onChanges = new Subject();
-    this.preserveFragment = false;
-    this.skipLocationChange = false;
-    this.replaceUrl = false;
-    this.routerLinkInput = null;
     const tagName = el.nativeElement.tagName?.toLowerCase();
     this.isAnchorElement = tagName === "a" || tagName === "area";
     if (this.isAnchorElement) {
@@ -4571,6 +4827,27 @@ var RouterLink = class _RouterLink {
     }
   }
   /**
+   * Passed to {@link Router#createUrlTree} as part of the
+   * `UrlCreationOptions`.
+   * @see {@link UrlCreationOptions#preserveFragment}
+   * @see {@link Router#createUrlTree}
+   */
+  preserveFragment = false;
+  /**
+   * Passed to {@link Router#navigateByUrl} as part of the
+   * `NavigationBehaviorOptions`.
+   * @see {@link NavigationBehaviorOptions#skipLocationChange}
+   * @see {@link Router#navigateByUrl}
+   */
+  skipLocationChange = false;
+  /**
+   * Passed to {@link Router#navigateByUrl} as part of the
+   * `NavigationBehaviorOptions`.
+   * @see {@link NavigationBehaviorOptions#replaceUrl}
+   * @see {@link Router#navigateByUrl}
+   */
+  replaceUrl = false;
+  /**
    * Modifies the tab index if there was not a tabindex attribute on the element during
    * instantiation.
    */
@@ -4580,7 +4857,7 @@ var RouterLink = class _RouterLink {
     }
     this.applyAttributeValue("tabindex", newTabIndex);
   }
-  /** @nodoc */
+  /** @docs-private */
   // TODO(atscott): Remove changes parameter in major version as a breaking change.
   ngOnChanges(changes) {
     if (ngDevMode && isUrlTree(this.routerLinkInput) && (this.fragment !== void 0 || this.queryParams || this.queryParamsHandling || this.preserveFragment || this.relativeTo)) {
@@ -4591,6 +4868,7 @@ var RouterLink = class _RouterLink {
     }
     this.onChanges.next(this);
   }
+  routerLinkInput = null;
   /**
    * Commands to pass to {@link Router#createUrlTree} or a `UrlTree`.
    *   - **array**: commands to pass to {@link Router#createUrlTree}.
@@ -4613,7 +4891,7 @@ var RouterLink = class _RouterLink {
       this.setTabIndexIfNotOnNativeEl("0");
     }
   }
-  /** @nodoc */
+  /** @docs-private */
   onClick(button, ctrlKey, shiftKey, altKey, metaKey) {
     const urlTree = this.urlTree;
     if (urlTree === null) {
@@ -4636,7 +4914,7 @@ var RouterLink = class _RouterLink {
     this.router.navigateByUrl(urlTree, extras);
     return !this.isAnchorElement;
   }
-  /** @nodoc */
+  /** @docs-private */
   ngOnDestroy() {
     this.subscription?.unsubscribe();
   }
@@ -4683,50 +4961,44 @@ var RouterLink = class _RouterLink {
       preserveFragment: this.preserveFragment
     });
   }
-  static {
-    this.ɵfac = function RouterLink_Factory(__ngFactoryType__) {
-      return new (__ngFactoryType__ || _RouterLink)(ɵɵdirectiveInject(Router), ɵɵdirectiveInject(ActivatedRoute), ɵɵinjectAttribute("tabindex"), ɵɵdirectiveInject(Renderer2), ɵɵdirectiveInject(ElementRef), ɵɵdirectiveInject(LocationStrategy));
-    };
-  }
-  static {
-    this.ɵdir = ɵɵdefineDirective({
-      type: _RouterLink,
-      selectors: [["", "routerLink", ""]],
-      hostVars: 1,
-      hostBindings: function RouterLink_HostBindings(rf, ctx) {
-        if (rf & 1) {
-          ɵɵlistener("click", function RouterLink_click_HostBindingHandler($event) {
-            return ctx.onClick($event.button, $event.ctrlKey, $event.shiftKey, $event.altKey, $event.metaKey);
-          });
-        }
-        if (rf & 2) {
-          ɵɵattribute("target", ctx.target);
-        }
-      },
-      inputs: {
-        target: "target",
-        queryParams: "queryParams",
-        fragment: "fragment",
-        queryParamsHandling: "queryParamsHandling",
-        state: "state",
-        info: "info",
-        relativeTo: "relativeTo",
-        preserveFragment: [2, "preserveFragment", "preserveFragment", booleanAttribute],
-        skipLocationChange: [2, "skipLocationChange", "skipLocationChange", booleanAttribute],
-        replaceUrl: [2, "replaceUrl", "replaceUrl", booleanAttribute],
-        routerLink: "routerLink"
-      },
-      standalone: true,
-      features: [ɵɵInputTransformsFeature, ɵɵNgOnChangesFeature]
-    });
-  }
+  static ɵfac = function RouterLink_Factory(__ngFactoryType__) {
+    return new (__ngFactoryType__ || _RouterLink)(ɵɵdirectiveInject(Router), ɵɵdirectiveInject(ActivatedRoute), ɵɵinjectAttribute("tabindex"), ɵɵdirectiveInject(Renderer2), ɵɵdirectiveInject(ElementRef), ɵɵdirectiveInject(LocationStrategy));
+  };
+  static ɵdir = ɵɵdefineDirective({
+    type: _RouterLink,
+    selectors: [["", "routerLink", ""]],
+    hostVars: 1,
+    hostBindings: function RouterLink_HostBindings(rf, ctx) {
+      if (rf & 1) {
+        ɵɵlistener("click", function RouterLink_click_HostBindingHandler($event) {
+          return ctx.onClick($event.button, $event.ctrlKey, $event.shiftKey, $event.altKey, $event.metaKey);
+        });
+      }
+      if (rf & 2) {
+        ɵɵattribute("target", ctx.target);
+      }
+    },
+    inputs: {
+      target: "target",
+      queryParams: "queryParams",
+      fragment: "fragment",
+      queryParamsHandling: "queryParamsHandling",
+      state: "state",
+      info: "info",
+      relativeTo: "relativeTo",
+      preserveFragment: [2, "preserveFragment", "preserveFragment", booleanAttribute],
+      skipLocationChange: [2, "skipLocationChange", "skipLocationChange", booleanAttribute],
+      replaceUrl: [2, "replaceUrl", "replaceUrl", booleanAttribute],
+      routerLink: "routerLink"
+    },
+    features: [ɵɵNgOnChangesFeature]
+  });
 };
 (() => {
   (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(RouterLink, [{
     type: Directive,
     args: [{
-      selector: "[routerLink]",
-      standalone: true
+      selector: "[routerLink]"
     }]
   }], () => [{
     type: Router
@@ -4797,28 +5069,67 @@ var RouterLink = class _RouterLink {
   });
 })();
 var RouterLinkActive = class _RouterLinkActive {
+  router;
+  element;
+  renderer;
+  cdr;
+  link;
+  links;
+  classes = [];
+  routerEventsSubscription;
+  linkInputChangesSubscription;
+  _isActive = false;
   get isActive() {
     return this._isActive;
   }
+  /**
+   * Options to configure how to determine if the router link is active.
+   *
+   * These options are passed to the `Router.isActive()` function.
+   *
+   * @see {@link Router#isActive}
+   */
+  routerLinkActiveOptions = {
+    exact: false
+  };
+  /**
+   * Aria-current attribute to apply when the router link is active.
+   *
+   * Possible values: `'page'` | `'step'` | `'location'` | `'date'` | `'time'` | `true` | `false`.
+   *
+   * @see {@link https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Attributes/aria-current}
+   */
+  ariaCurrentWhenActive;
+  /**
+   *
+   * You can use the output `isActiveChange` to get notified each time the link becomes
+   * active or inactive.
+   *
+   * Emits:
+   * true  -> Route is active
+   * false -> Route is inactive
+   *
+   * ```html
+   * <a
+   *  routerLink="/user/bob"
+   *  routerLinkActive="active-link"
+   *  (isActiveChange)="this.onRouterLinkActive($event)">Bob</a>
+   * ```
+   */
+  isActiveChange = new EventEmitter();
   constructor(router, element, renderer, cdr, link) {
     this.router = router;
     this.element = element;
     this.renderer = renderer;
     this.cdr = cdr;
     this.link = link;
-    this.classes = [];
-    this._isActive = false;
-    this.routerLinkActiveOptions = {
-      exact: false
-    };
-    this.isActiveChange = new EventEmitter();
     this.routerEventsSubscription = router.events.subscribe((s) => {
       if (s instanceof NavigationEnd) {
         this.update();
       }
     });
   }
-  /** @nodoc */
+  /** @docs-private */
   ngAfterContentInit() {
     of(this.links.changes, of(null)).pipe(mergeAll()).subscribe((_) => {
       this.update();
@@ -4838,11 +5149,11 @@ var RouterLinkActive = class _RouterLinkActive {
     const classes = Array.isArray(data) ? data : data.split(" ");
     this.classes = classes.filter((c) => !!c);
   }
-  /** @nodoc */
+  /** @docs-private */
   ngOnChanges(changes) {
     this.update();
   }
-  /** @nodoc */
+  /** @docs-private */
   ngOnDestroy() {
     this.routerEventsSubscription.unsubscribe();
     this.linkInputChangesSubscription?.unsubscribe();
@@ -4884,45 +5195,39 @@ var RouterLinkActive = class _RouterLinkActive {
     const isActiveCheckFn = this.isLinkActive(this.router);
     return this.link && isActiveCheckFn(this.link) || this.links.some(isActiveCheckFn);
   }
-  static {
-    this.ɵfac = function RouterLinkActive_Factory(__ngFactoryType__) {
-      return new (__ngFactoryType__ || _RouterLinkActive)(ɵɵdirectiveInject(Router), ɵɵdirectiveInject(ElementRef), ɵɵdirectiveInject(Renderer2), ɵɵdirectiveInject(ChangeDetectorRef), ɵɵdirectiveInject(RouterLink, 8));
-    };
-  }
-  static {
-    this.ɵdir = ɵɵdefineDirective({
-      type: _RouterLinkActive,
-      selectors: [["", "routerLinkActive", ""]],
-      contentQueries: function RouterLinkActive_ContentQueries(rf, ctx, dirIndex) {
-        if (rf & 1) {
-          ɵɵcontentQuery(dirIndex, RouterLink, 5);
-        }
-        if (rf & 2) {
-          let _t;
-          ɵɵqueryRefresh(_t = ɵɵloadQuery()) && (ctx.links = _t);
-        }
-      },
-      inputs: {
-        routerLinkActiveOptions: "routerLinkActiveOptions",
-        ariaCurrentWhenActive: "ariaCurrentWhenActive",
-        routerLinkActive: "routerLinkActive"
-      },
-      outputs: {
-        isActiveChange: "isActiveChange"
-      },
-      exportAs: ["routerLinkActive"],
-      standalone: true,
-      features: [ɵɵNgOnChangesFeature]
-    });
-  }
+  static ɵfac = function RouterLinkActive_Factory(__ngFactoryType__) {
+    return new (__ngFactoryType__ || _RouterLinkActive)(ɵɵdirectiveInject(Router), ɵɵdirectiveInject(ElementRef), ɵɵdirectiveInject(Renderer2), ɵɵdirectiveInject(ChangeDetectorRef), ɵɵdirectiveInject(RouterLink, 8));
+  };
+  static ɵdir = ɵɵdefineDirective({
+    type: _RouterLinkActive,
+    selectors: [["", "routerLinkActive", ""]],
+    contentQueries: function RouterLinkActive_ContentQueries(rf, ctx, dirIndex) {
+      if (rf & 1) {
+        ɵɵcontentQuery(dirIndex, RouterLink, 5);
+      }
+      if (rf & 2) {
+        let _t;
+        ɵɵqueryRefresh(_t = ɵɵloadQuery()) && (ctx.links = _t);
+      }
+    },
+    inputs: {
+      routerLinkActiveOptions: "routerLinkActiveOptions",
+      ariaCurrentWhenActive: "ariaCurrentWhenActive",
+      routerLinkActive: "routerLinkActive"
+    },
+    outputs: {
+      isActiveChange: "isActiveChange"
+    },
+    exportAs: ["routerLinkActive"],
+    features: [ɵɵNgOnChangesFeature]
+  });
 };
 (() => {
   (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(RouterLinkActive, [{
     type: Directive,
     args: [{
       selector: "[routerLinkActive]",
-      exportAs: "routerLinkActive",
-      standalone: true
+      exportAs: "routerLinkActive"
     }]
   }], () => [{
     type: Router
@@ -4967,18 +5272,14 @@ var PreloadAllModules = class _PreloadAllModules {
   preload(route, fn) {
     return fn().pipe(catchError(() => of(null)));
   }
-  static {
-    this.ɵfac = function PreloadAllModules_Factory(__ngFactoryType__) {
-      return new (__ngFactoryType__ || _PreloadAllModules)();
-    };
-  }
-  static {
-    this.ɵprov = ɵɵdefineInjectable({
-      token: _PreloadAllModules,
-      factory: _PreloadAllModules.ɵfac,
-      providedIn: "root"
-    });
-  }
+  static ɵfac = function PreloadAllModules_Factory(__ngFactoryType__) {
+    return new (__ngFactoryType__ || _PreloadAllModules)();
+  };
+  static ɵprov = ɵɵdefineInjectable({
+    token: _PreloadAllModules,
+    factory: _PreloadAllModules.ɵfac,
+    providedIn: "root"
+  });
 };
 (() => {
   (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(PreloadAllModules, [{
@@ -4992,18 +5293,14 @@ var NoPreloading = class _NoPreloading {
   preload(route, fn) {
     return of(null);
   }
-  static {
-    this.ɵfac = function NoPreloading_Factory(__ngFactoryType__) {
-      return new (__ngFactoryType__ || _NoPreloading)();
-    };
-  }
-  static {
-    this.ɵprov = ɵɵdefineInjectable({
-      token: _NoPreloading,
-      factory: _NoPreloading.ɵfac,
-      providedIn: "root"
-    });
-  }
+  static ɵfac = function NoPreloading_Factory(__ngFactoryType__) {
+    return new (__ngFactoryType__ || _NoPreloading)();
+  };
+  static ɵprov = ɵɵdefineInjectable({
+    token: _NoPreloading,
+    factory: _NoPreloading.ɵfac,
+    providedIn: "root"
+  });
 };
 (() => {
   (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(NoPreloading, [{
@@ -5014,7 +5311,12 @@ var NoPreloading = class _NoPreloading {
   }], null, null);
 })();
 var RouterPreloader = class _RouterPreloader {
-  constructor(router, compiler, injector, preloadingStrategy, loader) {
+  router;
+  injector;
+  preloadingStrategy;
+  loader;
+  subscription;
+  constructor(router, injector, preloadingStrategy, loader) {
     this.router = router;
     this.injector = injector;
     this.preloadingStrategy = preloadingStrategy;
@@ -5027,7 +5329,7 @@ var RouterPreloader = class _RouterPreloader {
   preload() {
     return this.processRoutes(this.injector, this.router.config);
   }
-  /** @nodoc */
+  /** @docs-private */
   ngOnDestroy() {
     if (this.subscription) {
       this.subscription.unsubscribe();
@@ -5074,18 +5376,14 @@ var RouterPreloader = class _RouterPreloader {
       }
     });
   }
-  static {
-    this.ɵfac = function RouterPreloader_Factory(__ngFactoryType__) {
-      return new (__ngFactoryType__ || _RouterPreloader)(ɵɵinject(Router), ɵɵinject(Compiler), ɵɵinject(EnvironmentInjector), ɵɵinject(PreloadingStrategy), ɵɵinject(RouterConfigLoader));
-    };
-  }
-  static {
-    this.ɵprov = ɵɵdefineInjectable({
-      token: _RouterPreloader,
-      factory: _RouterPreloader.ɵfac,
-      providedIn: "root"
-    });
-  }
+  static ɵfac = function RouterPreloader_Factory(__ngFactoryType__) {
+    return new (__ngFactoryType__ || _RouterPreloader)(ɵɵinject(Router), ɵɵinject(EnvironmentInjector), ɵɵinject(PreloadingStrategy), ɵɵinject(RouterConfigLoader));
+  };
+  static ɵprov = ɵɵdefineInjectable({
+    token: _RouterPreloader,
+    factory: _RouterPreloader.ɵfac,
+    providedIn: "root"
+  });
 };
 (() => {
   (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(RouterPreloader, [{
@@ -5096,8 +5394,6 @@ var RouterPreloader = class _RouterPreloader {
   }], () => [{
     type: Router
   }, {
-    type: Compiler
-  }, {
     type: EnvironmentInjector
   }, {
     type: PreloadingStrategy
@@ -5107,17 +5403,24 @@ var RouterPreloader = class _RouterPreloader {
 })();
 var ROUTER_SCROLLER = new InjectionToken("");
 var RouterScroller = class _RouterScroller {
-  /** @nodoc */
+  urlSerializer;
+  transitions;
+  viewportScroller;
+  zone;
+  options;
+  routerEventsSubscription;
+  scrollEventsSubscription;
+  lastId = 0;
+  lastSource = "imperative";
+  restoredId = 0;
+  store = {};
+  /** @docs-private */
   constructor(urlSerializer, transitions, viewportScroller, zone, options = {}) {
     this.urlSerializer = urlSerializer;
     this.transitions = transitions;
     this.viewportScroller = viewportScroller;
     this.zone = zone;
     this.options = options;
-    this.lastId = 0;
-    this.lastSource = "imperative";
-    this.restoredId = 0;
-    this.store = {};
     options.scrollPositionRestoration ||= "disabled";
     options.anchorScrolling ||= "disabled";
   }
@@ -5171,22 +5474,18 @@ var RouterScroller = class _RouterScroller {
       }, 0);
     });
   }
-  /** @nodoc */
+  /** @docs-private */
   ngOnDestroy() {
     this.routerEventsSubscription?.unsubscribe();
     this.scrollEventsSubscription?.unsubscribe();
   }
-  static {
-    this.ɵfac = function RouterScroller_Factory(__ngFactoryType__) {
-      ɵɵinvalidFactory();
-    };
-  }
-  static {
-    this.ɵprov = ɵɵdefineInjectable({
-      token: _RouterScroller,
-      factory: _RouterScroller.ɵfac
-    });
-  }
+  static ɵfac = function RouterScroller_Factory(__ngFactoryType__) {
+    ɵɵinvalidFactory();
+  };
+  static ɵprov = ɵɵdefineInjectable({
+    token: _RouterScroller,
+    factory: _RouterScroller.ɵfac
+  });
 };
 (() => {
   (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(RouterScroller, [{
@@ -5302,43 +5601,30 @@ function withEnabledBlockingInitialNavigation() {
     provide: INITIAL_NAVIGATION,
     useValue: 0
     /* InitialNavigation.EnabledBlocking */
-  }, {
-    provide: APP_INITIALIZER,
-    multi: true,
-    deps: [Injector],
-    useFactory: (injector) => {
-      const locationInitialized = injector.get(LOCATION_INITIALIZED, Promise.resolve());
-      return () => {
-        return locationInitialized.then(() => {
-          return new Promise((resolve) => {
-            const router = injector.get(Router);
-            const bootstrapDone = injector.get(BOOTSTRAP_DONE);
-            afterNextNavigation(router, () => {
-              resolve(true);
-            });
-            injector.get(NavigationTransitions).afterPreactivation = () => {
-              resolve(true);
-              return bootstrapDone.closed ? of(void 0) : bootstrapDone;
-            };
-            router.initialNavigation();
-          });
+  }, provideAppInitializer(() => {
+    const injector = inject(Injector);
+    const locationInitialized = injector.get(LOCATION_INITIALIZED, Promise.resolve());
+    return locationInitialized.then(() => {
+      return new Promise((resolve) => {
+        const router = injector.get(Router);
+        const bootstrapDone = injector.get(BOOTSTRAP_DONE);
+        afterNextNavigation(router, () => {
+          resolve(true);
         });
-      };
-    }
-  }];
+        injector.get(NavigationTransitions).afterPreactivation = () => {
+          resolve(true);
+          return bootstrapDone.closed ? of(void 0) : bootstrapDone;
+        };
+        router.initialNavigation();
+      });
+    });
+  })];
   return routerFeature(2, providers);
 }
 function withDisabledInitialNavigation() {
-  const providers = [{
-    provide: APP_INITIALIZER,
-    multi: true,
-    useFactory: () => {
-      const router = inject(Router);
-      return () => {
-        router.setUpLocationChangeListener();
-      };
-    }
-  }, {
+  const providers = [provideAppInitializer(() => {
+    inject(Router).setUpLocationChangeListener();
+  }), {
     provide: INITIAL_NAVIGATION,
     useValue: 2
     /* InitialNavigation.Disabled */
@@ -5406,6 +5692,7 @@ function withComponentInputBinding() {
   return routerFeature(8, providers);
 }
 function withViewTransitions(options) {
+  performanceMarkFeature("NgRouterViewTransitions");
   const providers = [{
     provide: CREATE_VIEW_TRANSITION,
     useValue: createViewTransition
@@ -5418,7 +5705,7 @@ function withViewTransitions(options) {
   return routerFeature(9, providers);
 }
 var ROUTER_DIRECTIVES = [RouterOutlet, RouterLink, RouterLinkActive, ɵEmptyOutletComponent];
-var ROUTER_FORROOT_GUARD = new InjectionToken(typeof ngDevMode === "undefined" || ngDevMode ? "router duplicate forRoot guard" : "ROUTER_FORROOT_GUARD");
+var ROUTER_FORROOT_GUARD = new InjectionToken(typeof ngDevMode === "undefined" || ngDevMode ? "router duplicate forRoot guard" : "");
 var ROUTER_PROVIDERS = [
   Location,
   {
@@ -5441,7 +5728,12 @@ var ROUTER_PROVIDERS = [
   } : []
 ];
 var RouterModule = class _RouterModule {
-  constructor(guard) {
+  constructor() {
+    if (typeof ngDevMode === "undefined" || ngDevMode) {
+      inject(ROUTER_FORROOT_GUARD, {
+        optional: true
+      });
+    }
   }
   /**
    * Creates and configures a module with all the router providers and directives.
@@ -5449,7 +5741,7 @@ var RouterModule = class _RouterModule {
    *
    * When registering the NgModule at the root, import as follows:
    *
-   * ```
+   * ```ts
    * @NgModule({
    *   imports: [RouterModule.forRoot(ROUTES)]
    * })
@@ -5468,11 +5760,14 @@ var RouterModule = class _RouterModule {
         provide: ROUTES,
         multi: true,
         useValue: routes
-      }, {
+      }, typeof ngDevMode === "undefined" || ngDevMode ? {
         provide: ROUTER_FORROOT_GUARD,
         useFactory: provideForRootGuard,
         deps: [[Router, new Optional(), new SkipSelf()]]
-      }, {
+      } : [], config?.errorHandler ? {
+        provide: NAVIGATION_ERROR_HANDLER,
+        useValue: config.errorHandler
+      } : [], {
         provide: ROUTER_CONFIGURATION,
         useValue: config ? config : {}
       }, config?.useHash ? provideHashLocationStrategy() : providePathLocationStrategy(), provideRouterScroller(), config?.preloadingStrategy ? withPreloading(config.preloadingStrategy).ɵproviders : [], config?.initialNavigation ? provideInitialNavigation(config) : [], config?.bindToComponentInputs ? withComponentInputBinding().ɵproviders : [], config?.enableViewTransitions ? withViewTransitions().ɵproviders : [], provideRouterInitializer()]
@@ -5483,7 +5778,7 @@ var RouterModule = class _RouterModule {
    * without creating a new Router service.
    * When registering for submodules and lazy-loaded submodules, create the NgModule as follows:
    *
-   * ```
+   * ```ts
    * @NgModule({
    *   imports: [RouterModule.forChild(ROUTES)]
    * })
@@ -5504,21 +5799,15 @@ var RouterModule = class _RouterModule {
       }]
     };
   }
-  static {
-    this.ɵfac = function RouterModule_Factory(__ngFactoryType__) {
-      return new (__ngFactoryType__ || _RouterModule)(ɵɵinject(ROUTER_FORROOT_GUARD, 8));
-    };
-  }
-  static {
-    this.ɵmod = ɵɵdefineNgModule({
-      type: _RouterModule,
-      imports: [RouterOutlet, RouterLink, RouterLinkActive, ɵEmptyOutletComponent],
-      exports: [RouterOutlet, RouterLink, RouterLinkActive, ɵEmptyOutletComponent]
-    });
-  }
-  static {
-    this.ɵinj = ɵɵdefineInjector({});
-  }
+  static ɵfac = function RouterModule_Factory(__ngFactoryType__) {
+    return new (__ngFactoryType__ || _RouterModule)();
+  };
+  static ɵmod = ɵɵdefineNgModule({
+    type: _RouterModule,
+    imports: [RouterOutlet, RouterLink, RouterLinkActive, ɵEmptyOutletComponent],
+    exports: [RouterOutlet, RouterLink, RouterLinkActive, ɵEmptyOutletComponent]
+  });
+  static ɵinj = ɵɵdefineInjector({});
 };
 (() => {
   (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(RouterModule, [{
@@ -5527,15 +5816,7 @@ var RouterModule = class _RouterModule {
       imports: ROUTER_DIRECTIVES,
       exports: ROUTER_DIRECTIVES
     }]
-  }], () => [{
-    type: void 0,
-    decorators: [{
-      type: Optional
-    }, {
-      type: Inject,
-      args: [ROUTER_FORROOT_GUARD]
-    }]
-  }], null);
+  }], () => [], null);
 })();
 function provideRouterScroller() {
   return {
@@ -5566,7 +5847,7 @@ function providePathLocationStrategy() {
   };
 }
 function provideForRootGuard(router) {
-  if ((typeof ngDevMode === "undefined" || ngDevMode) && router) {
+  if (router) {
     throw new RuntimeError(4007, `The Router was provided more than once. This can happen if 'forRoot' is used outside of the root injector. Lazy loaded modules should use RouterModule.forChild() instead.`);
   }
   return "guarded";
@@ -5590,6 +5871,8 @@ function provideRouterInitializer() {
     }
   ];
 }
+
+// node_modules/@angular/router/fesm2022/router.mjs
 function mapToCanMatch(providers) {
   return providers.map((provider) => (...params) => inject(provider).canMatch(...params));
 }
@@ -5605,7 +5888,7 @@ function mapToCanDeactivate(providers) {
 function mapToResolve(provider) {
   return (...params) => inject(provider).resolve(...params);
 }
-var VERSION = new Version("18.2.14");
+var VERSION = new Version("19.2.17");
 export {
   ActivatedRoute,
   ActivatedRouteSnapshot,
@@ -5634,6 +5917,7 @@ export {
   PreloadingStrategy,
   ROUTER_CONFIGURATION,
   ROUTER_INITIALIZER,
+  ROUTER_OUTLET_DATA,
   ROUTES,
   RedirectCommand,
   ResolveEnd,
@@ -5687,10 +5971,12 @@ export {
 };
 /*! Bundled license information:
 
+@angular/router/fesm2022/router-Dwfin5Au.mjs:
+@angular/router/fesm2022/router_module-DTJgGWLd.mjs:
 @angular/router/fesm2022/router.mjs:
   (**
-   * @license Angular v18.2.14
-   * (c) 2010-2024 Google LLC. https://angular.io/
+   * @license Angular v19.2.17
+   * (c) 2010-2025 Google LLC. https://angular.io/
    * License: MIT
    *)
 */

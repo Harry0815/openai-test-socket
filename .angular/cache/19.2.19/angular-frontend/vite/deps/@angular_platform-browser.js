@@ -16,7 +16,6 @@ import {
   HammerGesturesPlugin,
   HammerModule,
   HydrationFeatureKind,
-  INTERNAL_BROWSER_PLATFORM_PROVIDERS,
   KeyEventsPlugin,
   Meta,
   REMOVE_STYLES_ON_COMPONENT_DESTROY,
@@ -27,19 +26,17 @@ import {
   createApplication,
   disableDebugTools,
   enableDebugTools,
-  initDomAdapter,
+  getDOM,
   platformBrowser,
   provideClientHydration,
   provideProtractorTestingSupport,
   withEventReplay,
   withHttpTransferCacheOptions,
   withI18nSupport,
+  withIncrementalHydration,
   withNoHttpTransferCache
-} from "./chunk-JITDVJVL.js";
-import {
-  getDOM
-} from "./chunk-P73P33NA.js";
-import "./chunk-WO4GTBY6.js";
+} from "./chunk-ZFW2SRKY.js";
+import "./chunk-BVTU6VRO.js";
 export {
   BrowserModule,
   By,
@@ -66,6 +63,7 @@ export {
   withEventReplay,
   withHttpTransferCacheOptions,
   withI18nSupport,
+  withIncrementalHydration,
   withNoHttpTransferCache,
   BrowserDomAdapter as ɵBrowserDomAdapter,
   BrowserGetTestability as ɵBrowserGetTestability,
@@ -73,10 +71,7 @@ export {
   DomRendererFactory2 as ɵDomRendererFactory2,
   DomSanitizerImpl as ɵDomSanitizerImpl,
   HammerGesturesPlugin as ɵHammerGesturesPlugin,
-  INTERNAL_BROWSER_PLATFORM_PROVIDERS as ɵINTERNAL_BROWSER_PLATFORM_PROVIDERS,
   KeyEventsPlugin as ɵKeyEventsPlugin,
   SharedStylesHost as ɵSharedStylesHost,
-  getDOM as ɵgetDOM,
-  initDomAdapter as ɵinitDomAdapter
+  getDOM as ɵgetDOM
 };
-//# sourceMappingURL=@angular_platform-browser.js.map
