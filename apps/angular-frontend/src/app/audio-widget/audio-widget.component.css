@@ -1,0 +1,110 @@
+.audio-widget {
+  border: 1px solid #ccc;
+  border-radius: 12px;
+  padding: 16px;
+  max-width: 460px;
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(4px);
+  color: inherit;
+}
+
+.controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+button {
+  border: none;
+  padding: 10px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+button.primary {
+  background: #2563eb;
+  color: white;
+}
+
+button.ghost {
+  background: transparent;
+  border: 1px solid #a3a3a3;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.select {
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  gap: 4px;
+}
+
+.badge {
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid #ccc;
+}
+
+.badge-live {
+  background: #22c55e33;
+  border-color: #22c55e;
+}
+
+.badge-idle {
+  background: #e5e5e5;
+  color: #404040;
+}
+
+.badge-warn {
+  background: #fef3c7;
+  border-color: #f59e0b;
+  color: #92400e;
+}
+
+.badges {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.meter {
+  position: relative;
+  background: #f3f4f6;
+  border-radius: 999px;
+  height: 14px;
+  overflow: hidden;
+}
+
+.meter-bar {
+  position: absolute;
+  inset: 0;
+  width: 0%;
+  background: linear-gradient(90deg, #22c55e, #f97316, #ef4444);
+  transition: width 60ms linear;
+}
+
+.meter-text {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.status-box {
+  margin-top: 12px;
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 8px;
+  padding: 10px;
+  min-height: 90px;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  white-space: pre-wrap;
+}
