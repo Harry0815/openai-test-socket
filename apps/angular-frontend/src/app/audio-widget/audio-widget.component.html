@@ -1,0 +1,24 @@
+<div class="audio-widget">
+  <div class="controls">
+    <button class="primary" (click)="start()" [disabled]="isRunning">Start</button>
+    <button class="ghost" (click)="stop()" [disabled]="!isRunning">Stop</button>
+    <label class="select">
+      Encoder
+      <select [value]="selectedEncoder" (change)="onEncoderChange($any($event.target).value)">
+        <option value="pcm">PCM</option>
+        <option value="opus">Opus (MediaRecorder)</option>
+      </select>
+    </label>
+    <span [class]="statusBadgeClass">{{ statusBadgeLabel }}</span>
+  </div>
+  <div class="meter" aria-label="Pegel">
+    <div class="meter-bar" [style.width.%]="levelPercent"></div>
+    <span class="meter-text">{{ levelDb.toFixed(1) }} dB</span>
+  </div>
+  <div class="badges">
+    <span [class]="connectionBadgeClass">{{ connectionBadgeLabel }}</span>
+    <span [class]="streamingBadgeClass">{{ streamingBadgeLabel }}</span>
+    <span [class]="fallbackBadgeClass">{{ fallbackBadgeLabel }}</span>
+  </div>
+  <pre class="status-box">{{ statusLogText }}</pre>
+</div>

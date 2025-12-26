@@ -227,11 +227,22 @@ export class OwnWebSocketGateway implements OnGatewayConnection, OnGatewayDiscon
 
     this.logger.log(`Received message: ${data.message} ${data.sequence.toString()}, ${data.mimeType}, ${data.chunk.length} bytes`);
 
-    if (clientData?.audioConverter) {
-      const buffer = Buffer.from(data.chunk, 'base64');
+    if (!clientData) {
+      return;
+    }
+
+    const buffer = Buffer.from(data.chunk, 'base64');
+    const isPcm = data.mimeType?.includes('audio/pcm') || data.mimeType?.includes('audio/raw');
+
+    if (isPcm) {
+      clientData.pendingInputChunks.push({ sequence: data.sequence, receivedAt: Date.now() });
+      clientData.openAIHandler?.sendAudioChunk(buffer);
+      this.logger.debug(`[latency] seq ${data.sequence}: PCM chunk forwarded (${buffer.length} bytes)`);
+      return;
+    }
+
+    if (clientData.audioConverter) {
       clientData.inputFileStream.write(buffer);
-
-
       clientData.audioConverter.write(buffer);
       clientData.pendingInputChunks.push({ sequence: data.sequence, receivedAt: Date.now() });
       this.logger.debug(`[latency] seq ${data.sequence}: chunk queued for FFmpeg (${buffer.length} bytes)`);

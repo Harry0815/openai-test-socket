@@ -1,0 +1,7 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "angular-frontend",
+  "projectType": "application",
+  "sourceRoot": "apps/angular-frontend/src",
+  "targets": {}
+}
