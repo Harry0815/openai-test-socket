@@ -21,6 +21,12 @@ import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import { PassThrough } from 'node:stream';
 import * as fs from 'node:fs';
 import { WriteStream } from 'node:fs';
+import {
+  createBrowserToRtcPipeline,
+  createRtcToBrowserPipeline,
+  DEFAULT_CHUNK_DURATION_MS,
+  DEFAULT_RTC_SAMPLE_RATE,
+} from '../../lib/audio';
 
 // Setze den Pfad zur ffmpeg Binärdatei
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
@@ -62,46 +68,30 @@ export class OwnWebSocketGateway implements OnGatewayConnection, OnGatewayDiscon
     // Initialisiere OpenAI Handler für diesen Client
     const openAIHandler = new OpenAIRealtimeSocketHandler({
       instructions: 'Translate the incoming speech to fluent English. Respond only with the translation as audio.',
+      inputSampleRate: DEFAULT_RTC_SAMPLE_RATE,
+      outputSampleRate: DEFAULT_RTC_SAMPLE_RATE,
     });
 
-    const inputStream = new PassThrough();
-    const inputStreamReverse = new PassThrough();
+    const browserToRtc = createBrowserToRtcPipeline({
+      inputFormat: 'webm',
+      sampleRate: DEFAULT_RTC_SAMPLE_RATE,
+      chunkDurationMs: DEFAULT_CHUNK_DURATION_MS,
+    });
+    const rtcToBrowser = createRtcToBrowserPipeline({
+      outputFormat: 'webm',
+      sampleRate: DEFAULT_RTC_SAMPLE_RATE,
+      chunkDurationMs: DEFAULT_CHUNK_DURATION_MS,
+      jitterBuffer: {
+        targetLatencyMs: 40,
+        maxLatencyMs: 200,
+        flushIntervalMs: 10,
+      },
+    });
     const pendingInputChunks: Array<{ sequence: number; receivedAt: number }> = [];
     const pendingAIChunks: Array<{ receivedAt: number }> = [];
 
-    // FFmpeg Konfiguration: WebM -> PCM16 (S16LE, 16kHz, Mono)
-    const ffmpegProcess = ffmpeg(inputStream)
-      .inputFormat('webm')
-      .audioCodec('pcm_s16le')
-      .audioFrequency(24000)
-      // .audioBitrate(16)
-      .audioChannels(1)
-      .format('s16le')
-      .on('error', (err) => this.logger.error('FFmpeg Error: ' + err.message));
-
-    const outputStream = ffmpegProcess.pipe();
-
-    const ffmpegProcessReverse = ffmpeg(inputStreamReverse)
-      .inputFormat('s16le')
-      // .audioFrequency(24000) // MUSS exakt 24000 sein, wenn OpenAI 24kHz liefert
-      // .audioBitrate(8)
-      // .audioChannels(1)
-      // .audioCodec('libopus')
-      .format('webm')
-      // .outputOptions([
-      //   '-deadline realtime',     // WICHTIG für niedrige Latenz
-      //   '-preset ultrafast',
-      //   '-content_type audio/webm',
-      //   '-cluster_size_limit 1M',
-      //   '-cluster_time_limit 500',
-      //   '-dash 1'
-      // ])
-      .on('error', (err) => this.logger.error('Output FFmpeg Error: ' + err.message));
-
-    const outputStreamReverse = ffmpegProcessReverse.pipe();
-
     // Die konvertierten PCM-Daten an OpenAI senden
-    outputStream.on('data', (pcmChunk: Buffer) => {
+    browserToRtc.output.on('data', (pcmChunk: Buffer) => {
       const telemetry = pendingInputChunks.shift();
       if (telemetry) {
         const latency = Date.now() - telemetry.receivedAt;
@@ -117,7 +107,7 @@ export class OwnWebSocketGateway implements OnGatewayConnection, OnGatewayDiscon
     });
 
     // Die konvertierten PCM-Daten an OpenAI senden
-    outputStreamReverse.on('data', (pcmChunk: Buffer) => {
+    rtcToBrowser.output.on('data', (pcmChunk: Buffer) => {
       const telemetry = pendingAIChunks.shift();
       if (telemetry) {
         const latency = Date.now() - telemetry.receivedAt;
@@ -139,8 +129,8 @@ export class OwnWebSocketGateway implements OnGatewayConnection, OnGatewayDiscon
     const p = {
       wss: wss,
       openAIHandler: openAIHandler,
-      audioConverter: inputStream,
-      audioConverterReverse: inputStreamReverse,
+      audioConverter: browserToRtc.input,
+      audioConverterReverse: rtcToBrowser.input,
       pendingInputChunks,
       pendingAIChunks,
       audioFileStream,
@@ -159,7 +149,7 @@ export class OwnWebSocketGateway implements OnGatewayConnection, OnGatewayDiscon
       // In die Datei schreiben
       audioFileStream.write(audioBuffer);
 
-      inputStreamReverse.write(Buffer.from(payload.base64, 'base64'));
+      rtcToBrowser.input.write(Buffer.from(payload.base64, 'base64'));
       // wss.write(JSON.stringify({
       //   type: 'play-data', // Das Frontend erwartet diesen Typ
       //   data: payload.base64,
