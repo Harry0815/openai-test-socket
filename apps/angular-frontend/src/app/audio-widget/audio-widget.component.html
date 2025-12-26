@@ -1,0 +1,24 @@
+<div class="audio-widget">
+  <div class="controls">
+    <button class="primary" type="button" (click)="start()" [disabled]="running">Start</button>
+    <button class="ghost" type="button" (click)="stop()" [disabled]="!running">Stop</button>
+    <label class="select">
+      Encoder
+      <select [(ngModel)]="encoder">
+        <option value="pcm">PCM</option>
+        <option value="opus">Opus (MediaRecorder)</option>
+      </select>
+    </label>
+    <span [class]="statusBadgeClass">{{ statusBadgeText }}</span>
+  </div>
+  <div class="meter" aria-label="Pegel">
+    <div class="meter-bar" [style.width]="levelPercent + '%'" role="presentation"></div>
+    <span class="meter-text">{{ levelText }}</span>
+  </div>
+  <div class="badges">
+    <span [class]="connectionBadgeClass">{{ connectionState }}</span>
+    <span [class]="streamingBadgeClass">{{ streamingBadgeText }}</span>
+    <span [class]="fallbackBadgeClass">{{ fallbackReason }}</span>
+  </div>
+  <pre class="status-box">{{ statusLog.join('\n') }}</pre>
+</div>
