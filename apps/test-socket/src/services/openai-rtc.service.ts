@@ -34,7 +34,7 @@ export interface OpenAiRtcSession {
 }
 
 const DEFAULT_INSTRUCTIONS =
-  'You are a simultaneous interpreter. Transcribe German speech, translate into English, and respond with English speech only.';
+  'Du bist ein Simultanübersetzer. Übersetze fortlaufend von Deutsch nach Englisch. Antworte ausschließlich mit der Übersetzung, keine Kommentare.';
 
 @Injectable()
 export class OpenAiRtcService {

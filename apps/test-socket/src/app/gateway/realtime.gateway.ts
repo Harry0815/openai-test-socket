@@ -43,7 +43,8 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     }
 
     const openAIHandler = new OpenAIRealtimeSocketHandler({
-      instructions: 'Act as a bilingual assistant. Translate incoming speech and respond with a concise spoken English answer.',
+      instructions:
+        "'Du bist ein Simultanübersetzer. Übersetze fortlaufend von Deutsch nach Englisch. Antworte ausschließlich mit der Übersetzung, keine Kommentare.',",
       inputSampleRate: 24_000,
       outputSampleRate: 24_000,
     });

@@ -28,8 +28,8 @@ export type AudioDeltaPayload = {
 const DEFAULT_OPTIONS: Required<Omit<RealtimeSessionOptions, 'instructions'>> & Pick<RealtimeSessionOptions, 'instructions'> = {
   model: 'gpt-4o-realtime-preview',
   voice: 'alloy',
-  inputSampleRate: 16000,
-  outputSampleRate: 16000,
+  inputSampleRate: 24000,
+  outputSampleRate: 24000,
   instructions: undefined,
 };
 
@@ -126,21 +126,24 @@ export class OpenAIRealtimeSocketHandler {
   private sendSessionCreate() {
     this.logger.debug('Sending session.update to OpenAI Realtime');
     const event = {
-      "type": "session.update",
-      "session": {
-        "type": "realtime",
-        "model": "gpt-realtime",
-        "instructions": "Du bist ein Simultanübersetzer. Übersetze fortlaufend von Deutsch nach Englisch. Antworte ausschließlich mit der Übersetzung, keine Kommentare.",
-        "audio": {
-          "input": {
-            "format": { "type": "audio/pcm", "rate": 24000 },
-            "turn_detection": { "type": "server_vad", "threshold": 0.5, "prefix_padding_ms": 200, "silence_duration_ms": 250 }
+      type: 'session.update',
+      session: {
+        type: 'realtime',
+        model: this.options.model,
+        instructions:
+          this.options.instructions ??
+          'Du bist ein Simultanübersetzer. Übersetze fortlaufend von Deutsch nach Englisch. Antworte ausschließlich mit der Übersetzung, keine Kommentare.',
+        audio: {
+          input: {
+            format: { type: 'audio/pcm', rate: this.options.inputSampleRate },
+            turn_detection: { type: 'server_vad', threshold: 0.5, prefix_padding_ms: 200, silence_duration_ms: 250 },
           },
-          "output": {
-            "voice": "marin"
-          }
-        }
-      }
+          output: {
+            voice: this.options.voice,
+            format: { type: 'audio/pcm', rate: this.options.outputSampleRate },
+          },
+        },
+      },
     };
     /*
     const event = {
@@ -186,9 +189,9 @@ export class OpenAIRealtimeSocketHandler {
         instructions,
         modalities: ['text', 'audio'],
         audio: {
-          voice: "marin",
+          voice: this.options.voice,
           format: 'pcm16',
-          // sample_rate: 16000,
+          sample_rate: this.options.outputSampleRate,
         },
       },
     }));
@@ -250,7 +253,7 @@ export class OpenAIRealtimeSocketHandler {
           const payload: AudioDeltaPayload = {
             base64: msg.delta,
             format: 'pcm16',
-            sampleRate: 16000,
+            sampleRate: this.options.outputSampleRate,
             responseId: msg.response_id,
           };
           const pending = this.pendingInputChunks.shift();
