@@ -1,4 +1,4 @@
-const DEFAULT_SAMPLE_RATE = 48000;
+const DEFAULT_SAMPLE_RATE = 24000;
 
 /**
  * AudioStreamService kapselt die Aufnahme (getUserMedia),
@@ -21,6 +21,7 @@ export class AudioStreamService {
     this.encoder = 'pcm';
     this.isCapturing = false;
     this.playbackGain = null;
+    this.nextPlaybackTime = 0;
   }
 
   async ensureContext(sampleRate = DEFAULT_SAMPLE_RATE) {
@@ -46,13 +47,13 @@ export class AudioStreamService {
     }
     this.encoder = encoder;
 
-    await this.ensureContext();
+    await this.ensureContext(DEFAULT_SAMPLE_RATE);
     this.mediaStream = await navigator.mediaDevices.getUserMedia({
       audio: {
         echoCancellation: useEchoCancellation,
         noiseSuppression: useNoiseSuppression,
         channelCount: 1,
-        sampleRate: this.audioContext.sampleRate,
+        sampleRate: DEFAULT_SAMPLE_RATE,
       },
       video: false,
     });
@@ -77,7 +78,7 @@ export class AudioStreamService {
       this._notifyStatus('Aufnahme gestartet (Opus via MediaRecorder)');
     } else {
       await this._startPcmProcessor(chunkSize);
-      this._notifyStatus('Aufnahme gestartet (PCM)');
+      this._notifyStatus('Aufnahme gestartet (PCM, 24 kHz Mono)');
     }
 
     this._startLevelMeter();
@@ -165,13 +166,69 @@ export class AudioStreamService {
     this._notifyStatus('Aufnahme gestoppt');
   }
 
-  async playAudioChunk(arrayBuffer) {
+  async playAudioChunk(arrayBuffer, meta = {}) {
+    console.log('[AudioStreamService] playAudioChunk called, buffer size:', arrayBuffer?.byteLength, 'meta:', meta);
     const context = await this.ensureContext();
-    const audioBuffer = await context.decodeAudioData(arrayBuffer.slice(0));
+    if (!this.nextPlaybackTime) {
+      this.nextPlaybackTime = context.currentTime;
+    }
+    const format = meta.format || 'pcm16';
+    const sampleRate = meta.sampleRate || 24000;
+
+    try {
+      if (format === 'webm' || format === 'mp3' || format === 'wav') {
+        console.log('[AudioStreamService] Decoding as', format);
+        const audioBuffer = await context.decodeAudioData(arrayBuffer.slice(0));
+        this._schedulePlayback(audioBuffer);
+      } else {
+        console.log('[AudioStreamService] Playing as PCM16, sampleRate:', sampleRate);
+        const audioBuffer = await this._createPcm16Buffer(arrayBuffer, sampleRate);
+        this._schedulePlayback(audioBuffer);
+      }
+    } catch (err) {
+      console.error('[AudioStreamService] playAudioChunk error:', err);
+      try {
+        const audioBuffer = await context.decodeAudioData(arrayBuffer.slice(0));
+        this._schedulePlayback(audioBuffer);
+      } catch (fallbackErr) {
+        this._notifyStatus(`Audio-Wiedergabe fehlgeschlagen: ${err.message}`);
+      }
+    }
+  }
+
+  _schedulePlayback(audioBuffer) {
+    const context = this.audioContext;
     const source = context.createBufferSource();
     source.buffer = audioBuffer;
     source.connect(this.playbackGain);
-    source.start();
+
+    const startTime = Math.max(context.currentTime + 0.01, this.nextPlaybackTime || context.currentTime);
+    source.start(startTime);
+    this.nextPlaybackTime = startTime + audioBuffer.duration;
+
+    console.log('[AudioStreamService] Audio scheduled at', startTime.toFixed(3), 'duration', audioBuffer.duration.toFixed(3));
+  }
+
+  async _createPcm16Buffer(arrayBuffer, sampleRate = 24000) {
+    const context = await this.ensureContext();
+    const int16Array = new Int16Array(arrayBuffer);
+    const float32Array = new Float32Array(int16Array.length);
+
+    console.log('[AudioStreamService] _playPcm16Chunk: samples:', int16Array.length, 'sampleRate:', sampleRate, 'duration:', (int16Array.length / sampleRate).toFixed(3), 's');
+
+    for (let i = 0; i < int16Array.length; i++) {
+      float32Array[i] = int16Array[i] / 32768.0;
+    }
+
+    const audioBuffer = context.createBuffer(1, float32Array.length, sampleRate);
+    audioBuffer.getChannelData(0).set(float32Array);
+    return audioBuffer;
+  }
+
+  async _playPcm16Chunk(arrayBuffer, sampleRate = 24000) {
+    const audioBuffer = await this._createPcm16Buffer(arrayBuffer, sampleRate);
+    this._schedulePlayback(audioBuffer);
+    console.log('[AudioStreamService] Audio playback started');
   }
 
   _notifyStatus(message) {

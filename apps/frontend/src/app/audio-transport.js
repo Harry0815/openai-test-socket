@@ -1,3 +1,5 @@
+const DEFAULT_SAMPLE_RATE = 24000;
+
 /**
  * Schlanker Transport über WebSocket. Stellt optional einen
  * Offer/Answer-Aufbau für WebRTC bereit (wenn `useWebRTC` true ist),
@@ -66,6 +68,8 @@ export class AudioTransport {
       };
 
       this.socket.onmessage = async (event) => {
+        console.log('[AudioTransport] Message received:', typeof event.data, event.data instanceof ArrayBuffer ? `ArrayBuffer(${event.data.byteLength})` : event.data.substring?.(0, 200));
+
         if (event.data instanceof ArrayBuffer) {
           this.onBinary?.(event.data);
           return;
@@ -73,8 +77,25 @@ export class AudioTransport {
 
         try {
           const msg = JSON.parse(event.data);
+          console.log('[AudioTransport] Parsed message type:', msg.type);
+
+          // Audio-Daten vom Server (TTS/Translation) - unterstützt beide Formate
+          if ((msg.type === 'play-data' || msg.type === 'tts-chunk') && msg.data) {
+            console.log('[AudioTransport] Audio data received, format:', msg.format, 'sampleRate:', msg.sampleRate, 'data length:', msg.data.length);
+            const binaryString = atob(msg.data);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+            }
+            console.log('[AudioTransport] Calling onBinary with', bytes.buffer.byteLength, 'bytes');
+            this.onBinary?.(bytes.buffer, { format: msg.format, sampleRate: msg.sampleRate });
+            return;
+          }
+
           await this._handleSignal(msg);
         } catch (error) {
+          console.log('[AudioTransport] Non-JSON message:', event.data);
           this._notify(`Nachricht: ${event.data}`);
         }
       };
@@ -176,7 +197,11 @@ export class AudioTransport {
     }
 
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-      this.socket.send(this._wrapPayload(payload, encoder));
+      const metadata = {
+        encoder,
+        timestamp: Date.now(),
+      };
+      this.socket.send(this._wrapPayload(payload, encoder, metadata));
       if (!this.streamingActive) {
         this._setStreaming(true);
       }
@@ -207,22 +232,26 @@ export class AudioTransport {
   }
 
 
-  _wrapPayload(payload, encoder) {
-    // Uint8Array in Binär-String umwandeln
+  _wrapPayload(payload, encoder, metadata = {}) {
     let binary = '';
     const len = payload.byteLength;
     for (let i = 0; i < len; i++) {
       binary += String.fromCharCode(payload[i]);
     }
-
-    // Binär-String in Base64
     const base64Data = btoa(binary);
 
-    const p = {
+    this._chunkSequence = (this._chunkSequence || 0) + 1;
+    const mimeType = encoder === 'opus' ? 'audio/webm;codecs=opus' : 'audio/pcm';
+
+    return JSON.stringify({
       type: 'audio',
-      data: base64Data
-    }
-    return JSON.stringify(p);
+      data: base64Data,
+      sequence: this._chunkSequence,
+      mimeType,
+      sampleRate: DEFAULT_SAMPLE_RATE,
+      encoder,
+      ...metadata,
+    });
   }
 
   _setStreaming(active) {

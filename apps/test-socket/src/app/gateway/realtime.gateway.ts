@@ -166,20 +166,20 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   private enforceRateLimit(client: WebSocket, session: ClientSessionState, size: number): boolean {
-    const now = Date.now();
-    if (now - session.rateWindowStart > RATE_LIMIT_WINDOW_MS) {
-      session.rateWindowStart = now;
-      session.bytesThisWindow = 0;
-    }
-
-    session.bytesThisWindow += size;
-    if (session.bytesThisWindow > RATE_LIMIT_BYTES) {
-      this.logger.warn('Client exceeded realtime audio rate limit');
-      client.send(JSON.stringify({ type: 'error', reason: 'rate_limited' }));
-      client.close(4408, 'rate limit exceeded');
-      return false;
-    }
-
+    // const now = Date.now();
+    // if (now - session.rateWindowStart > RATE_LIMIT_WINDOW_MS) {
+    //   session.rateWindowStart = now;
+    //   session.bytesThisWindow = 0;
+    // }
+    //
+    // session.bytesThisWindow += size;
+    // if (session.bytesThisWindow > RATE_LIMIT_BYTES) {
+    //   this.logger.warn('Client exceeded realtime audio rate limit');
+    //   client.send(JSON.stringify({ type: 'error', reason: 'rate_limited' }));
+    //   client.close(4408, 'rate limit exceeded');
+    //   return false;
+    // }
+    //
     return true;
   }
 

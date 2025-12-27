@@ -22,7 +22,7 @@ export class AudioWidget {
 
     this.transport = new AudioTransport({
       url: this.config.transportUrl,
-      onBinary: (data) => this.streamService.playAudioChunk(data),
+      onBinary: (data, meta) => this.streamService.playAudioChunk(data, meta),
       onStatus: (msg) => this._logStatus(`Transport: ${msg}`),
       onConnectionChange: (state) => this._setConnectionState(state),
       onStreamingChange: (active) => this._setStreamingState(active),
