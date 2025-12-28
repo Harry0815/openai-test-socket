@@ -7,7 +7,7 @@ import {
 } from '@nestjs/websockets';
 import { IncomingMessage } from 'node:http';
 import { Server, WebSocket } from 'ws';
-import { AudioDeltaPayload, OpenAIRealtimeSocketHandler } from '../helper/OpenAISocketHandler';
+import { AudioDeltaPayload, OpenAIRealtimeSocketHandler } from '@test-socket/ai-helper';
 
 const RATE_LIMIT_BYTES = 1024 * 1024;
 const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute

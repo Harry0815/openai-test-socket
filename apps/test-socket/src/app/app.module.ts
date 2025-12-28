@@ -9,11 +9,14 @@ import { EchoService } from './services/echo.service';
 import { AudioService } from './services/audio.service';
 import { AudioRecordingService } from './services/recording.service';
 import { SocketLiveAudioService } from './services/live-audio.service';
-import { WsGateway } from './gateway/ws.gateway';
-import { RealtimeGateway } from './gateway/realtime.gateway';
+import {
+  FeatureTranslateModule,
+} from '@test-socket/feature-translate';
 
 @Module({
-  imports: [ ],
+  imports: [
+    FeatureTranslateModule
+  ],
   controllers: [
     PingController,
     HealthController,
@@ -26,9 +29,7 @@ import { RealtimeGateway } from './gateway/realtime.gateway';
     EchoService,
     AudioService,
     AudioRecordingService,
-    WsGateway,
     SocketLiveAudioService,
-    RealtimeGateway
   ],
 })
 export class AppModule {}

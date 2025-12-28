@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
 import { Injectable, Logger } from '@nestjs/common';
-import { OpenAIRealtimeSocketHandler } from '../app/helper/OpenAISocketHandler';
+import { OpenAIRealtimeSocketHandler } from '@test-socket/ai-helper';
 
 export interface OpenAiRtcSessionOptions {
   model?: string;

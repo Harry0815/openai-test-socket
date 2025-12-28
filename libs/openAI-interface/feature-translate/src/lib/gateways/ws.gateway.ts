@@ -14,8 +14,8 @@ import {
   MsgDataFromClient,
   msgDataFromClientSchema,
   msgTypes,
-} from '../models/msg.model';
-import { OpenAIRealtimeSocketHandler } from '../helper/OpenAISocketHandler';
+} from '@test-socket/ai-helper';
+import { OpenAIRealtimeSocketHandler } from '@test-socket/ai-helper';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import { PassThrough } from 'node:stream';

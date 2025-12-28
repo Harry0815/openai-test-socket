@@ -1,0 +1,9 @@
+{
+  "name": "ai-helper",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/openAI-interface/ai-helper/src",
+  "projectType": "library",
+  "tags": [],
+  "// targets": "to see all targets run: nx show project ai-helper --web",
+  "targets": {}
+}

@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import WebSocket from 'ws';
+import { WebSocket } from 'ws';
 import { Logger } from '@nestjs/common';
 
 // Lightweight interface describing the subset of the WS API this class uses.
