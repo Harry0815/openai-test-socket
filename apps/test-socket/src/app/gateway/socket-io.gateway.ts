@@ -11,7 +11,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
-import { OwnAudioService } from '../services/audio.service';
+import { AudioService } from '../services/audio.service';
 import { AudioRecordingService } from '../services/recording.service';
 import { SocketLiveAudioService } from '../services/live-audio.service';
 
@@ -29,7 +29,7 @@ export class SocketioGateway implements OnGatewayConnection, OnGatewayDisconnect
 
 
   private readonly logger = new Logger(SocketioGateway.name);
-  private readonly audioService: OwnAudioService = new OwnAudioService();
+  private readonly audioService: AudioService = new AudioService();
   private readonly audioRecordingService: AudioRecordingService = new AudioRecordingService();
   private readonly liveAudioService: SocketLiveAudioService = new SocketLiveAudioService();
 

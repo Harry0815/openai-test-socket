@@ -23,8 +23,8 @@ export interface AudioFormatInfo {
 }
 
 @Injectable()
-export class OwnAudioService {
-  private readonly logger = new Logger(OwnAudioService.name);
+export class AudioService {
+  private readonly logger = new Logger(AudioService.name);
   private readonly audioDirectory = path.join(process.cwd(), 'apps/test-socket/src/assets/audio');
 
   // Erweiterte Audio-Format-Definitionen

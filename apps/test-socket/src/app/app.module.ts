@@ -6,11 +6,10 @@ import { StaticController } from './controllers/static.controller';
 import { PingService } from './services/ping.service';
 import { HealthService } from './services/health.service';
 import { EchoService } from './services/echo.service';
-import { SocketioGateway } from './gateway/socket-io.gateway';
-import { OwnAudioService } from './services/audio.service';
+import { AudioService } from './services/audio.service';
 import { AudioRecordingService } from './services/recording.service';
 import { SocketLiveAudioService } from './services/live-audio.service';
-import { OwnWebSocketGateway } from './gateway/websocket.gateway';
+import { WsGateway } from './gateway/ws.gateway';
 import { RealtimeGateway } from './gateway/realtime.gateway';
 
 @Module({
@@ -25,11 +24,9 @@ import { RealtimeGateway } from './gateway/realtime.gateway';
     PingService,
     HealthService,
     EchoService,
-    OwnAudioService,
+    AudioService,
     AudioRecordingService,
-    // SocketioGateway,
-    OwnWebSocketGateway,
-    // SocketIoZweiGateway,
+    WsGateway,
     SocketLiveAudioService,
     RealtimeGateway
   ],

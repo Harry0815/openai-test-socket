@@ -19,8 +19,6 @@ import { OpenAIRealtimeSocketHandler } from '../helper/OpenAISocketHandler';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import { PassThrough } from 'node:stream';
-import * as fs from 'node:fs';
-import { WriteStream } from 'node:fs';
 
 // Setze den Pfad zur ffmpeg Binärdatei
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
@@ -33,7 +31,7 @@ ffmpeg.setFfmpegPath(ffmpegInstaller.path);
   },
   transports: ['websocket', 'polling'],
 })
-export class OwnWebSocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class WsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   clients = new Map<WebSocket, {
     wss: Duplex,
     openAIHandler?: OpenAIRealtimeSocketHandler,
@@ -48,7 +46,7 @@ export class OwnWebSocketGateway implements OnGatewayConnection, OnGatewayDiscon
   @WebSocketServer()
   server: Server;
 
-  private readonly logger = new Logger(OwnWebSocketGateway.name);
+  private readonly logger = new Logger(WsGateway.name);
 
   async handleConnection(client: WebSocket, ...args: never[]) {
     // const sessionId = Date.now();
