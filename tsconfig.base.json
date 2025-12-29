@@ -19,9 +19,6 @@
       "@test-socket/ai-helper": [
         "libs/openAI-interface/ai-helper/src/index.ts"
       ],
-      "@test-socket/feature-first-tests": [
-        "libs/openAI-interface/feature-first-tests/src/index.ts"
-      ],
       "@test-socket/feature-translate": [
         "libs/openAI-interface/feature-translate/src/index.ts"
       ]
