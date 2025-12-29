@@ -1,4 +1,4 @@
-import { HealthService } from '../services/health.service';
+import { HealthService } from '@test-socket/feature-first-test';
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { Controller, Post, Req, Res } from '@nestjs/common';
 import { ApiOperation } from '@nestjs/swagger';
