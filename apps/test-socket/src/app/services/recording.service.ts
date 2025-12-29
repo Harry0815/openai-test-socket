@@ -2,10 +2,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import * as fs from 'fs';
 import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { WebSocket } from 'ws';
 
 export interface RecordingSession {
   id: string;
-  clientId: string;
+  client: WebSocket;
   startTime: Date;
   endTime?: Date;
   filename?: string;
@@ -20,7 +21,7 @@ export interface RecordingSession {
 export class AudioRecordingService {
   private readonly logger = new Logger(AudioRecordingService.name);
   private readonly recordingsDirectory = path.join(process.cwd(), 'apps/test-socket/src/assets/recordings');
-  private activeSessions = new Map<string, RecordingSession>();
+  private activeSessions = new Map<WebSocket, RecordingSession>();
 
   constructor() {
     // Erstelle Verzeichnis falls es nicht existiert
@@ -29,11 +30,11 @@ export class AudioRecordingService {
     }
   }
 
-  startRecordingSession(clientId: string): RecordingSession {
+  startRecordingSession(client: WebSocket): RecordingSession {
     const sessionId = uuidv4();
     const session: RecordingSession = {
       id: sessionId,
-      clientId,
+      client,
       startTime: new Date(),
       size: 0,
       duration: 0,
@@ -42,16 +43,16 @@ export class AudioRecordingService {
       audioFormat: 'webm' // Browser sends WebM by default
     };
 
-    this.activeSessions.set(sessionId, session);
-    this.logger.log(`Started recording session ${sessionId} for client ${clientId}`);
+    this.activeSessions.set(client, session);
+    this.logger.log(`Started recording session ${sessionId} for client `);
 
     return session;
   }
 
-  addAudioChunk(sessionId: string, chunkData: Buffer): boolean {
-    const session = this.activeSessions.get(sessionId);
+  addAudioChunk(client: WebSocket, chunkData: Buffer): boolean {
+    const session = this.activeSessions.get(client);
     if (!session || session.status !== 'recording') {
-      this.logger.warn(`Invalid session or session not recording: ${sessionId}`);
+      this.logger.warn(`Invalid session or session not recording:`);
       return false;
     }
 
@@ -68,25 +69,25 @@ export class AudioRecordingService {
       // Detect actual format from chunk data
       if (chunkData.includes(Buffer.from('webm'))) {
         session.audioFormat = 'webm';
-        this.logger.log(`Detected WebM format for session ${sessionId}`);
+        this.logger.log(`Detected WebM format for session`);
       }
     }
 
-    this.logger.debug(`Added chunk to session ${sessionId}: ${chunkData.length} bytes (total: ${this.formatFileSize(session.size)})`);
+    this.logger.debug(`Added chunk to session : ${chunkData.length} bytes (total: ${this.formatFileSize(session.size)})`);
     return true;
   }
 
-  async stopRecordingSession(sessionId: string): Promise<RecordingSession | null> {
-    const session = this.activeSessions.get(sessionId);
+  async stopRecordingSession(client: WebSocket): Promise<RecordingSession | null> {
+    const session = this.activeSessions.get(client);
     if (!session) {
-      this.logger.warn(`Session not found: ${sessionId}`);
+      this.logger.warn(`Session not found: `);
       return null;
     }
 
     session.endTime = new Date();
     session.status = 'processing';
 
-    this.logger.log(`Stopping recording session ${sessionId}: ${session.chunks.length} chunks, ${this.formatFileSize(session.size)}, format: ${session.audioFormat}`);
+    this.logger.log(`Stopping recording session : ${session.chunks.length} chunks, ${this.formatFileSize(session.size)}, format: ${session.audioFormat}`);
 
     try {
       // Combine all chunks into a single buffer
@@ -99,12 +100,12 @@ export class AudioRecordingService {
 
       if (session.audioFormat === 'webm') {
         // Save as WebM file directly - browsers can play this
-        filename = `recording_${timestamp}_${sessionId.substring(0, 8)}.webm`;
+        filename = `recording_${timestamp}_12345678.webm`;
         finalPath = path.join(this.recordingsDirectory, filename);
         await this.saveWebMFile(totalBuffer, finalPath);
       } else {
         // Fallback to WAV (though this path shouldn't be reached with current browser behavior)
-        filename = `recording_${timestamp}_${sessionId.substring(0, 8)}.wav`;
+        filename = `recording_${timestamp}_12345678.wav`;
         finalPath = path.join(this.recordingsDirectory, filename);
         await this.createWavFile(totalBuffer, finalPath);
       }
@@ -116,14 +117,14 @@ export class AudioRecordingService {
       const durationSeconds = (session.endTime.getTime() - session.startTime.getTime()) / 1000;
       session.duration = durationSeconds;
 
-      this.logger.log(`Recording session ${sessionId} completed: ${session.filename} (${this.formatFileSize(session.size)}, ${durationSeconds.toFixed(2)}s)`);
+      this.logger.log(`Recording session completed: ${session.filename} (${this.formatFileSize(session.size)}, ${durationSeconds.toFixed(2)}s)`);
 
       // Clean up session data (keep metadata but remove chunks to save memory)
       session.chunks = [];
 
       return session;
     } catch (error) {
-      this.logger.error(`Error processing recording session ${sessionId}:`, error);
+      this.logger.error(`Error processing recording session:`, error);
       session.status = 'error';
       return session;
     }
@@ -206,8 +207,8 @@ export class AudioRecordingService {
     });
   }
 
-  getRecordingSession(sessionId: string): RecordingSession | null {
-    return this.activeSessions.get(sessionId) || null;
+  getRecordingSession(client: WebSocket): RecordingSession | null {
+    return this.activeSessions.get(client) || null;
   }
 
   getAllRecordings(): { file: string; size: number; created: Date; format: string; duration?: number }[] {

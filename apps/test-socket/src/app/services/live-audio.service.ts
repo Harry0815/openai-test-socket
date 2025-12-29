@@ -1,5 +1,6 @@
 
 import { Injectable, Logger } from '@nestjs/common';
+import { WebSocket } from 'ws';
 
 export interface LiveAudioSession {
   id: string;
@@ -13,27 +14,27 @@ export interface LiveAudioSession {
 @Injectable()
 export class SocketLiveAudioService {
   private readonly logger = new Logger(SocketLiveAudioService.name);
-  private activeSessions = new Map<string, LiveAudioSession>();
+  private activeSessions = new Map<WebSocket, LiveAudioSession>();
 
-  startLiveSession(clientId: string): LiveAudioSession {
-    const sessionId = `live_${clientId}_${Date.now()}`;
+  startLiveSession(client:  WebSocket): LiveAudioSession {
+    const sessionId = `live_${Date.now()}`;
     const session: LiveAudioSession = {
       id: sessionId,
-      clientId,
+      clientId: "1",
       startTime: new Date(),
       isActive: true,
       chunkCount: 0,
       totalBytes: 0
     };
 
-    this.activeSessions.set(sessionId, session);
-    this.logger.log(`Started live audio session ${sessionId} for client ${clientId}`);
+    this.activeSessions.set(client, session);
+    this.logger.log(`Started live audio session ${sessionId} for client`);
 
     return session;
   }
 
-  updateSessionStats(sessionId: string, chunkSize: number): boolean {
-    const session = this.activeSessions.get(sessionId);
+  updateSessionStats(client: WebSocket, chunkSize: number): boolean {
+    const session = this.activeSessions.get(client);
     if (!session || !session.isActive) {
       return false;
     }
@@ -44,8 +45,8 @@ export class SocketLiveAudioService {
     return true;
   }
 
-  stopLiveSession(sessionId: string): LiveAudioSession | null {
-    const session = this.activeSessions.get(sessionId);
+  stopLiveSession(client:  WebSocket): LiveAudioSession | null {
+    const session = this.activeSessions.get(client);
     if (!session) {
       return null;
     }
@@ -53,21 +54,20 @@ export class SocketLiveAudioService {
     session.isActive = false;
     const duration = (Date.now() - session.startTime.getTime()) / 1000;
 
-    this.logger.log(`Stopped live audio session ${sessionId}: ${session.chunkCount} chunks, ${this.formatFileSize(session.totalBytes)}, ${duration.toFixed(2)}s`);
+    this.logger.log(`Stopped live audio session  ${session.chunkCount} chunks, ${this.formatFileSize(session.totalBytes)}, ${duration.toFixed(2)}s`);
 
     // Cleanup after a short delay
     setTimeout(() => {
-      this.activeSessions.delete(sessionId);
+      this.activeSessions.delete(client);
     }, 5000);
 
     return session;
   }
 
-  getActiveSession(clientId: string): LiveAudioSession | null {
-    for (const session of this.activeSessions.values()) {
-      if (session.clientId === clientId && session.isActive) {
-        return session;
-      }
+  getActiveSession(client:  WebSocket): LiveAudioSession | null {
+    const session = this.activeSessions.get(client);
+    if (session && session.isActive) {
+      return session;
     }
     return null;
   }

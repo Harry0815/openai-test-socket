@@ -12,6 +12,7 @@ import { SocketLiveAudioService } from './services/live-audio.service';
 import {
   FeatureTranslateModule,
 } from '@test-socket/feature-translate';
+import { SocketioGateway } from './gateway/socket-io.gateway';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import {
     StaticController
   ],
   providers: [
+    SocketioGateway,
     PingService,
     HealthService,
     EchoService,

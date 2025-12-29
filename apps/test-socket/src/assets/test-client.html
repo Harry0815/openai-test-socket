@@ -203,7 +203,8 @@ Debug Data: ${JSON.stringify(debugData, null, 2)}
   }
 
   function streamAudio(fileId) {
-    if (!socket || !socket.connected) {
+    if (!socket) {    //  || !socket.connected) {
+      console.error('Socket nicht verbunden!',socket);
       addMessage('Nicht verbunden!', 'error');
       return;
     }
@@ -226,7 +227,10 @@ Debug Data: ${JSON.stringify(debugData, null, 2)}
     streamBuffer = [];
     debugData = { fileId, originalMime: file.mimeType, browserSupport, startTime: Date.now() };
 
-    socket.emit('stream-audio', { fileId, chunkSize: 64 * 1024 });
+    socket.send(JSON.stringify({
+      event: 'stream-audio',  // ✅ "event" ist der Schlüssel
+      data: { fileId, chunkSize: 64 * 1024 }
+    }));
   }
 
   function assembleAudioFromChunks() {
@@ -372,47 +376,72 @@ Debug Data: ${JSON.stringify(debugData, null, 2)}
 
   // Event Listeners
   connectBtn.addEventListener('click', () => {
-    socket = io('http://localhost:3000', {
-      transports: ['websocket', 'polling'],
-      timeout: 10000,
-      forceNew: true
-    });
+    socket = new WebSocket('ws://localhost:3001');
 
-    socket.on('connect', () => {
+    socket.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+      switch (message.type) {
+        case 'welcome':
+          welcome(message);
+          console.log('Welcome message received', message);
+          break;
+        case 'audio-list':
+          allAudioFiles = message.data;
+          addMessage(`📂 ${allAudioFiles.length} Audio-Dateien empfangen`, 'success');
+          displayAudioList(allAudioFiles);
+          break;
+        case 'audio-stream-start':
+          console.log(message);
+          streamMetadata = message.data;
+          addMessage(`🚀 Stream gestartet: ${streamMetadata.fileName} (${formatFileSize(streamMetadata.totalSize)})`, 'success');
+          updateStatus('Stream wird empfangen...');
+          updateProgress(0);
+          streamBuffer = [];
+          streamInfo.textContent = `Streaming: ${streamMetadata.fileName} - 0/${streamMetadata.totalSize} bytes`;
+          updateDebugInfo();
+          break;
+        case 'audio-chunk':
+          audioChunk(message.data);
+          break;
+        case 'audio-stream-end':
+          streamMetadata = message.data;
+          addMessage(`🏁 Stream beendet: (${streamMetadata.totalChunks} Chunks, ${formatFileSize(streamMetadata.totalSize)})`, 'success');
+          updateStatus('Stream abgeschlossen');
+          break;
+        case 'audio-error':
+          addMessage(`❌ Server-Fehler: ${data.error} (${data.fileId})`, 'error');
+          if (error.details) {
+            addMessage(`📋 Details: ${data.details}`, 'error');
+          }
+          updateStatus('Server-Fehler');
+          updateProgress(0);
+
+
+        default:
+          break;
+      }
+    };
+
+    socket.onopen = () => {
       status.textContent = `Verbunden (ID: ${socket.id})`;
       status.className = 'connected';
       connectBtn.disabled = true;
       disconnectBtn.disabled = false;
       refreshListBtn.disabled = false;
       addMessage('✅ Verbindung hergestellt!', 'success');
-    });
+    };
 
-    socket.on('disconnect', () => {
+    socket.onclose = () => {
       status.textContent = 'Nicht verbunden';
       status.className = 'disconnected';
       connectBtn.disabled = false;
       disconnectBtn.disabled = true;
       refreshListBtn.disabled = true;
       addMessage('❌ Verbindung getrennt', 'error');
-    });
+    }
 
-    socket.on('audio-list', (audioFiles) => {
-      allAudioFiles = audioFiles;
-      addMessage(`📂 ${audioFiles.length} Audio-Dateien empfangen`, 'success');
-      displayAudioList(audioFiles);
-    });
-
-    socket.on('audio-stream-start', (metadata) => {
-      streamMetadata = metadata;
-      addMessage(`🚀 Stream gestartet: ${metadata.fileName} (${formatFileSize(metadata.totalSize)})`, 'success');
-      updateStatus('Stream wird empfangen...');
-      updateProgress(0);
-      streamBuffer = [];
-      streamInfo.textContent = `Streaming: ${metadata.fileName} - 0/${metadata.totalSize} bytes`;
-      updateDebugInfo();
-    });
-
-    socket.on('audio-chunk', (chunk) => {
+    const audioChunk = (chunk) => {
+      console.log(chunk);
       streamBuffer.push(chunk);
       const progress = (chunk.chunkIndex + 1) / chunk.totalChunks * 100;
       updateProgress(progress);
@@ -424,31 +453,30 @@ Debug Data: ${JSON.stringify(debugData, null, 2)}
         addMessage(`📦 Stream komplett empfangen: ${chunk.totalChunks} Chunks`, 'success');
         assembleAudioFromChunks();
       }
-    });
+    };
 
-    socket.on('audio-stream-end', (data) => {
-      addMessage(`🏁 Stream beendet: ${data.fileId} (${data.totalChunks} Chunks, ${formatFileSize(data.totalSize)})`, 'success');
-      updateStatus('Stream abgeschlossen');
-    });
-
-    socket.on('audio-error', (error) => {
-      addMessage(`❌ Server-Fehler: ${error.error} (${error.fileId})`, 'error');
-      if (error.details) {
-        addMessage(`📋 Details: ${error.details}`, 'error');
-      }
-      updateStatus('Server-Fehler');
-      updateProgress(0);
-    });
+    const welcome = (data) => {
+      status.textContent = `Verbunden (ID: ${socket.id})`;
+      status.className = 'connected';
+      connectBtn.disabled = true;
+      disconnectBtn.disabled = false;
+      refreshListBtn.disabled = false;
+      addMessage('✅ Verbindung hergestellt!', 'success');
+    };
   });
 
   disconnectBtn.addEventListener('click', () => {
-    if (socket) socket.disconnect();
+    if (socket) socket.close();
   });
 
   refreshListBtn.addEventListener('click', () => {
     if (socket) {
       addMessage('🔄 Audio-Liste wird aktualisiert...', 'info');
-      socket.emit('request-audio-list');
+
+      socket.send(JSON.stringify({
+        event: 'request-audio-list',  // ✅ "event" ist der Schlüssel
+        data: { }
+      }));
     }
   });
 

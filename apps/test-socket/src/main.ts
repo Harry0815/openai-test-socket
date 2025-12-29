@@ -6,7 +6,6 @@ import {
 } from '@nestjs/platform-fastify';
 import { AppModule } from './app/app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-// import { IoAdapter } from '@nestjs/platform-socket.io';
 import { WsAdapter } from '@nestjs/platform-ws';
 
 
