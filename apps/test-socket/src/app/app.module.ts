@@ -5,10 +5,10 @@ import { EchoController } from './controllers/echo.controller';
 import { StaticController } from './controllers/static.controller';
 import {
   FeatureTranslateModule,
-} from '@test-socket/feature-translate';
+} from '@ai-services/feature-translate';
 import {
   FeatureFirstTestModule,
-} from '@test-socket/feature-first-test';
+} from '@ai-services/feature-first-test';
 
 @Module({
   imports: [

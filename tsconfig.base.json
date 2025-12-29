@@ -16,13 +16,13 @@
     "baseUrl": ".",
     "esModuleInterop": false,
     "paths": {
-      "@test-socket/ai-helper": [
+      "@ai-services/ai-helper": [
         "libs/openAI-interface/ai-helper/src/index.ts"
       ],
-      "@test-socket/feature-first-test": [
+      "@ai-services/feature-first-test": [
         "libs/openAI-interface/feature-first-test/src/index.ts"
       ],
-      "@test-socket/feature-translate": [
+      "@ai-services/feature-translate": [
         "libs/openAI-interface/feature-translate/src/index.ts"
       ]
     }

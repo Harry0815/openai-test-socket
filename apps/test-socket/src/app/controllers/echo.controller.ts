@@ -1,5 +1,5 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
-import { EchoService } from '@test-socket/feature-first-test';
+import { EchoService } from '@ai-services/feature-first-test';
 import { Controller, Post, Req, Res } from '@nestjs/common';
 import { ApiOperation } from '@nestjs/swagger';
 

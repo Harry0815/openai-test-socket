@@ -1,7 +1,7 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { Controller, Post, Req, Res } from '@nestjs/common';
 import { ApiOperation } from '@nestjs/swagger';
-import { PingService } from '@test-socket/feature-first-test';
+import { PingService } from '@ai-services/feature-first-test';
 
 export interface PingQuery {
   name?: string;
