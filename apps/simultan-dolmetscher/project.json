@@ -1,0 +1,58 @@
+{
+  "name": "simultan-dolmetscher",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/simultan-dolmetscher/src",
+  "projectType": "application",
+  "tags": [],
+  "targets": {
+    "build": {
+      "executor": "@nx/esbuild:esbuild",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "production",
+      "options": {
+        "platform": "node",
+        "outputPath": "dist/apps/simultan-dolmetscher",
+        "format": ["cjs"],
+        "bundle": false,
+        "main": "apps/simultan-dolmetscher/src/main.ts",
+        "tsConfig": "apps/simultan-dolmetscher/tsconfig.app.json",
+        "assets": ["apps/simultan-dolmetscher/src/assets"],
+        "generatePackageJson": true,
+        "esbuildOptions": {
+          "sourcemap": true,
+          "outExtension": {
+            ".js": ".js"
+          }
+        }
+      },
+      "configurations": {
+        "development": {},
+        "production": {
+          "esbuildOptions": {
+            "sourcemap": false,
+            "outExtension": {
+              ".js": ".js"
+            }
+          }
+        }
+      }
+    },
+    "serve": {
+      "executor": "@nx/js:node",
+      "defaultConfiguration": "development",
+      "dependsOn": ["build"],
+      "options": {
+        "buildTarget": "simultan-dolmetscher:build",
+        "runBuildTargetDependencies": false
+      },
+      "configurations": {
+        "development": {
+          "buildTarget": "simultan-dolmetscher:build:development"
+        },
+        "production": {
+          "buildTarget": "simultan-dolmetscher:build:production"
+        }
+      }
+    }
+  }
+}

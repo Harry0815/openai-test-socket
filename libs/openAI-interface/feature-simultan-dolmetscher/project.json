@@ -1,0 +1,9 @@
+{
+  "name": "feature-simultan-dolmetscher",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/openAI-interface/feature-simultan-dolmetscher/src",
+  "projectType": "library",
+  "tags": [],
+  "// targets": "to see all targets run: nx show project feature-simultan-dolmetscher --web",
+  "targets": {}
+}

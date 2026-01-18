@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fixed Live Audio Echo</title>
+  <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 5px; background: #f9f9f9; }
+    .controls button { margin: 5px; padding: 10px 15px; font-size: 14px; }
+    .btn-primary { background: #007bff; color: white; border: none; cursor: pointer; }
+    .btn-success { background: #28a745; color: white; border: none; cursor: pointer; }
+    .btn-danger { background: #dc3545; color: white; border: none; cursor: pointer; }
+    .btn-secondary { background: #6c757d; color: white; border: none; cursor: pointer; }
+    .btn-primary:disabled, .btn-success:disabled, .btn-danger:disabled { background: #ccc; cursor: not-allowed; }
+    .connected { color: green; font-weight: bold; }
+    .disconnected { color: red; font-weight: bold; }
+    .debug-box { height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; background: white; font-family: monospace; font-size: 12px; }
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 10px 0; }
+    .stat-card { background: white; padding: 10px; border-radius: 5px; text-align: center; }
+    .stat-number { font-size: 18px; font-weight: bold; color: #007bff; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>🔧 Fixed Live Audio Echo</h1>
+
+  <div class="section">
+    <h3>Verbindung</h3>
+    <p>Status: <span id="status" class="disconnected">Nicht verbunden</span></p>
+    <div class="controls">
+      <button id="connectBtn" class="btn-primary">Verbinden</button>
+      <button id="disconnectBtn" class="btn-secondary" disabled>Trennen</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>Live Echo Test</h3>
+    <div class="controls">
+      <button id="testAudioBtn" class="btn-success">🔊 Audio Test</button>
+      <button id="startEchoBtn" class="btn-danger" disabled>🎙️ Live Echo starten</button>
+      <button id="stopEchoBtn" class="btn-secondary" disabled>⏹️ Echo stoppen</button>
+    </div>
+    <p id="echoStatus">Echo Status: Bereit</p>
+
+    <div class="stats">
+      <div class="stat-card">
+        <div class="stat-number" id="chunksReceived">0</div>
+        <div>Chunks empfangen</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" id="chunksPlayed">0</div>
+        <div>Chunks abgespielt</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" id="latency">0ms</div>
+        <div>Durchschn. Latenz</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" id="bufferSize">0</div>
+        <div>Buffer-Größe</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>Debug Logs</h3>
+    <button onclick="clearLogs()" class="btn-secondary">Logs löschen</button>
+    <div id="debugLogs" class="debug-box"></div>
+  </div>
+</div>
+
+<script>
+
+
+  let socket = null;
+  let mediaRecorder = null;
+  let isEchoActive = false;
+  let currentSessionId = null;
+  let chunkSequence = 0;
+  let audio;
+  let audioCtx;
+  let workletNode;
+
+  // Audio playback system with buffer
+  let audioContext = null;
+  let audioBuffer = [];
+  let isProcessingBuffer = false;
+  let statsCounters = {
+    chunksReceived: 0,
+    chunksPlayed: 0,
+    latencySum: 0,
+    latencyCount: 0
+  };
+
+  // DOM Elements
+  const status = document.getElementById('status');
+  const debugLogs = document.getElementById('debugLogs');
+  const connectBtn = document.getElementById('connectBtn');
+  const disconnectBtn = document.getElementById('disconnectBtn');
+  const testAudioBtn = document.getElementById('testAudioBtn');
+  const startEchoBtn = document.getElementById('startEchoBtn');
+  const stopEchoBtn = document.getElementById('stopEchoBtn');
+  const echoStatus = document.getElementById('echoStatus');
+
+  // Stats elements
+  const chunksReceived = document.getElementById('chunksReceived');
+  const chunksPlayed = document.getElementById('chunksPlayed');
+  const latency = document.getElementById('latency');
+  const bufferSize = document.getElementById('bufferSize');
+
+  function log(message, type = 'info') {
+    const timestamp = new Date().toISOString().substring(11, 23);
+    const div = document.createElement('div');
+    div.textContent = `[${timestamp}] ${type.toUpperCase()}: ${message}`;
+    div.style.color = type === 'error' ? 'red' : type === 'success' ? 'green' : 'black';
+    debugLogs.appendChild(div);
+    debugLogs.scrollTop = debugLogs.scrollHeight;
+    console.log(`[${type}] ${message}`);
+  }
+
+  function clearLogs() {
+    debugLogs.innerHTML = '';
+    log('Logs gelöscht');
+  }
+
+  function updateEchoStatus(text) {
+    echoStatus.textContent = `Echo Status: ${text}`;
+  }
+
+  function updateStats() {
+    chunksReceived.textContent = statsCounters.chunksReceived;
+    chunksPlayed.textContent = statsCounters.chunksPlayed;
+    bufferSize.textContent = audioBuffer.length;
+
+    if (statsCounters.latencyCount > 0) {
+      const avgLatency = Math.round(statsCounters.latencySum / statsCounters.latencyCount);
+      latency.textContent = `${avgLatency}ms`;
+    }
+  }
+
+  function testAudio() {
+    log('Audio-Test wird gestartet...');
+
+    try {
+      const testContext = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = testContext.createOscillator();
+      const gainNode = testContext.createGain();
+
+      oscillator.connect(gainNode);
+      gainNode.connect(testContext.destination);
+
+      oscillator.frequency.value = 440;
+      gainNode.gain.setValueAtTime(0.1, testContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, testContext.currentTime + 0.5);
+
+      oscillator.start();
+      oscillator.stop(testContext.currentTime + 0.5);
+
+      log('Audio-Test erfolgreich - 440Hz Ton abgespielt', 'success');
+
+      setTimeout(() => testContext.close(), 1000);
+    } catch (error) {
+      log(`Audio-Test fehlgeschlagen: ${error.message}`, 'error');
+    }
+  }
+
+  // Initialize Web Audio API for better audio handling
+  async function initAudioContext() {
+    try {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+      // Resume context if suspended (Chrome autoplay policy)
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+
+      audio = new Audio();
+      log('Web Audio API initialisiert', 'success');
+      return true;
+    } catch (error) {
+      log(`Fehler beim Initialisieren der Web Audio API: ${error.message}`, 'error');
+      return false;
+    }
+  }
+
+  // Better audio playback using Web Audio API
+  async function playEchoAudioImproved(base64Chunk, sequence, sendTime) {
+    try {
+      if (!audioContext) {
+        const initialized = await initAudioContext();
+        if (!initialized) return;
+      }
+
+      statsCounters.chunksReceived++;
+
+      // Calculate latency
+      if (sendTime) {
+        const currentLatency = Date.now() - sendTime;
+        statsCounters.latencySum += currentLatency;
+        statsCounters.latencyCount++;
+      }
+
+      // Convert base64 to ArrayBuffer
+      const binaryString = atob(base64Chunk);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      // Add to buffer for processing
+      audioBuffer.push({
+        data: bytes.buffer,
+        sequence: sequence,
+        timestamp: Date.now()
+      });
+
+      updateStats();
+
+      // Process buffer if not already processing
+      if (!isProcessingBuffer) {
+        processAudioBuffer();
+      }
+
+      log(`Audio-Chunk ${sequence} zum Buffer hinzugefügt`);
+
+    } catch (error) {
+      log(`Fehler beim Audio-Processing: ${error.message}`, 'error');
+    }
+  }
+
+  async function processAudioBuffer() {
+    if (isProcessingBuffer || audioBuffer.length === 0) return;
+
+    isProcessingBuffer = true;
+
+    while (audioBuffer.length > 0) {
+      const chunk = audioBuffer.shift();
+      await playAudioChunk(chunk);
+
+      // Small delay to prevent overwhelming the audio system
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+
+    isProcessingBuffer = false;
+    updateStats();
+  }
+
+  async function playAudioChunk(chunk) {
+    try {
+      const bufferSource = new ArrayBuffer(chunk.chunk.length);
+      const t1 = new Uint8Array(bufferSource);
+      t1.set(new Uint8Array(chunk.chunk));
+
+      // Decode audio data using Web Audio API
+      const audioBuffer = await audioContext.decodeAudioData(bufferSource);
+
+      // Create buffer source
+      const source = audioContext.createBufferSource();
+      const gainNode = audioContext.createGain();
+
+      source.buffer = audioBuffer;
+      source.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+
+      // Set volume
+      gainNode.gain.value = 0.8;
+
+      // Play immediately
+      source.start();
+
+      statsCounters.chunksPlayed++;
+      log(`Audio-Chunk ${chunk.sequence} erfolgreich abgespielt`, 'success');
+
+    } catch (error) {
+      log(`Dekodierungs-Fehler für Chunk ${chunk.sequence}: ${error.message}`, 'error');
+
+      // Fallback: Try HTML Audio Element approach
+      await fallbackPlayback(chunk);
+    }
+  }
+
+  async function fallbackPlayback(chunk) {
+    try {
+      log(`Fallback-Wiedergabe für Chunk ${chunk.sequence}`);
+
+      // Create blob with different MIME types
+      const mimeTypes = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/ogg;codecs=opus',
+        'audio/ogg'
+      ];
+
+      for (const mimeType of mimeTypes) {
+        try {
+          const blob = new Blob([chunk.data], { type: mimeType });
+          const url = URL.createObjectURL(blob);
+          const audio = new Audio(url);
+
+          audio.volume = 0.8;
+
+          await audio.play();
+
+          log(`Fallback erfolgreich mit ${mimeType}`, 'success');
+          statsCounters.chunksPlayed++;
+
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+          break;
+
+        } catch (playError) {
+          URL.revokeObjectURL(URL.createObjectURL(new Blob([chunk.data], { type: mimeType })));
+          continue;
+        }
+      }
+    } catch (error) {
+      log(`Fallback-Wiedergabe fehlgeschlagen: ${error.message}`, 'error');
+    }
+  }
+
+  function base64ToBytes(b64) {
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    console.log(bytes);
+    return bytes;
+  }
+
+  function sniff(chunk) {
+    const b = base64ToBytes(chunk);
+    const bytes = [b[0],b[1],b[2],b[3],b[4],b[5],b[6],b[7],b[8],b[9],b[10],b[11],b[12],b[13],b[14],b[15]];
+    console.log(bytes);
+    const hex = bytes.map(n => n.toString(16));   // [...bytes.subarray(0, 16)].map(b=>b.toString(16).padStart(2,"0")).join(" ");
+    const asText = hex[0]+hex[1]+hex[2]+hex[3]+hex[4]+hex[5]+hex[6]+hex[7]+hex[8]+hex[9]+hex[10]+hex[11]+hex[12]+hex[13]+hex[14]+hex[15];   // new TextDecoder().decode(bytes.subarray(0, 16));
+    console.log("first16 hex:", hex, "text:", JSON.stringify(asText));
+
+    // Simple magic checks
+    const startsWith = (arr) => arr.every((v,i)=>bytes[i]===v);
+
+    if (asText.startsWith("RIFF") && asText.includes("WAVE")) return "WAV";
+    if (startsWith([0x4F,0x67,0x67,0x53])) return "OGG";          // "OggS" (oft Opus/Vorbis)
+    if (startsWith([0x49,0x44,0x33])) return "MP3(ID3)";
+    if (startsWith([0xFF,0xFB]) || startsWith([0xFF,0xF3]) || startsWith([0xFF,0xF2])) return "MP3(frame)";
+    if (startsWith([0x66,0x4C,0x61,0x43])) return "FLAC";         // "fLaC"
+    if (startsWith([0x1A,0x45,0xDF,0xA3])) return "WEBM/Matroska"; // EBML
+    if (startsWith([0x00,0x00,0x00]) && (asText.includes("ftyp"))) return "MP4/M4A(AAC)";
+    return "unknown/raw?";
+  }
+
+  function playBase64PCM(base64) {
+    if (!workletNode) return;
+
+    // Base64 → Bytes
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+
+    // Int16 → Float32
+    const pcm16 = new Int16Array(bytes.buffer);
+    const pcm32 = new Float32Array(pcm16.length);
+
+    for (let i = 0; i < pcm16.length; i++) {
+      pcm32[i] = pcm16[i] / 32768;
+    }
+
+    // an AudioWorklet senden
+    workletNode.port.postMessage(pcm32);
+  }
+
+  async function startLiveEcho() {
+    audioCtx = new AudioContext({ sampleRate: 48000 });
+    audioCtx.audioWorklet.addModule("audio-worklet.js");
+
+    await audioCtx.audioWorklet.addModule("./audio-worklet.js");
+
+    workletNode = new AudioWorkletNode(audioCtx, "pcm-player");
+    workletNode.connect(audioCtx.destination);
+
+    await audioCtx.resume();
+    console.log("Audio gestartet");
+
+    log('Live Echo wird gestartet...');
+    updateEchoStatus('Starten...');
+
+    // Reset stats
+    statsCounters = { chunksReceived: 0, chunksPlayed: 0, latencySum: 0, latencyCount: 0 };
+    audioBuffer = [];
+
+    try {
+      // Initialize audio context first
+      const audioInitialized = await initAudioContext();
+      if (!audioInitialized) {
+        throw new Error('Audio-System konnte nicht initialisiert werden');
+      }
+
+      // Test Mikrofon-Zugriff
+      log('Fordere Mikrofon-Zugriff an...');
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,  // Komplett aus für besseres Echo
+          autoGainControl: false,   // Aus für konstante Lautstärke
+          sampleRate: 48000,    //44100,
+          channelCount: 1
+        }
+      });
+
+      log('Mikrofon-Zugriff erhalten', 'success');
+
+      // MediaRecorder Setup
+      let mimeType = 'audio/webm';  //codecs=opus';
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = 'audio/webm';
+        log(`Fallback zu ${mimeType}`);
+      }
+
+      log(`Verwende MIME-Type: ${mimeType}`);
+
+      mediaRecorder = new MediaRecorder(stream, {
+        mimeType: mimeType,
+        audioBitsPerSecond: 48000  // Höhere Qualität für besseren Sound
+      });
+
+      // Server-Session starten
+      log('Starte Server-Session...');
+      socket.emit('start-live-audio');
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0 && currentSessionId && isEchoActive) {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const base64Data = reader.result.split(',')[1];
+            const sendTime = Date.now();
+            socket.emit('live-audio-chunk', {
+              sessionId: currentSessionId,
+              chunk: base64Data,
+              sequence: chunkSequence++,
+              sendTime: sendTime
+            });
+            log(`Audio-Chunk ${chunkSequence - 1} gesendet (${event.data.size} bytes)`);
+          };
+          reader.readAsDataURL(event.data);
+          console.log(event.data);
+        }
+      };
+
+      mediaRecorder.start(250); // Etwas größere Chunks für bessere Qualität
+      isEchoActive = true;
+      chunkSequence = 0;
+
+      // UI Update
+      startEchoBtn.disabled = true;
+      stopEchoBtn.disabled = false;
+      updateEchoStatus('Aktiv - warte auf Server-Response...');
+
+      log('MediaRecorder gestartet', 'success');
+
+    } catch (error) {
+      log(`Fehler beim Starten: ${error.message}`, 'error');
+      updateEchoStatus('Fehler');
+      startEchoBtn.disabled = false;
+    }
+  }
+
+  function stopLiveEcho() {
+    log('Live Echo wird gestoppt...');
+
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      mediaRecorder.stop();
+      mediaRecorder.stream.getTracks().forEach(track => track.stop());
+      log('MediaRecorder gestoppt');
+    }
+
+    isEchoActive = false;
+    audioBuffer = [];
+
+    if (currentSessionId) {
+      socket.emit('stop-live-audio', { sessionId: currentSessionId });
+      log('Server-Session beendet');
+    }
+
+    startEchoBtn.disabled = false;
+    stopEchoBtn.disabled = true;
+    updateEchoStatus('Gestoppt');
+  }
+
+  // Event Listeners
+  connectBtn.addEventListener('click', () => {
+    log('Verbindung wird hergestellt...');
+
+    socket = io('http://localhost:3000', {
+      transports: ['websocket', 'polling'],
+      timeout: 5000,
+      forceNew: true
+    });
+
+    socket.on('connect', () => {
+      status.textContent = `Verbunden (${socket.id})`;
+      status.className = 'connected';
+      connectBtn.disabled = true;
+      disconnectBtn.disabled = false;
+      startEchoBtn.disabled = false;
+      log('Socket.io verbunden!', 'success');
+    });
+
+    socket.on('disconnect', () => {
+      status.textContent = 'Nicht verbunden';
+      status.className = 'disconnected';
+      connectBtn.disabled = false;
+      disconnectBtn.disabled = true;
+      startEchoBtn.disabled = true;
+      stopEchoBtn.disabled = true;
+      log('Socket.io getrennt', 'error');
+
+      if (isEchoActive) {
+        stopLiveEcho();
+      }
+    });
+
+    socket.on('connect_error', (error) => {
+      log(`Verbindungsfehler: ${error.message}`, 'error');
+    });
+
+    // Live Audio Events
+    socket.on('live-audio-started', (data) => {
+      currentSessionId = data.sessionId;
+      updateEchoStatus('Server-Session aktiv');
+      log(`Live-Audio-Session gestartet: ${data.sessionId}`, 'success');
+    });
+
+    socket.on('live-audio-echo', async (data) => {
+      const { sequence, chunk, sendTime } = data;
+      log(`Echo-Chunk empfangen: ${sequence}`);
+      console.log(data);
+      console.log("sniff:", sniff(chunk));
+
+      // Latenz messen (optional)
+      if (sendTime) {
+        const rtt = Date.now() - sendTime;
+        log(`Roundtrip Latenz für Chunk ${sequence}: ${rtt}ms`);
+      }
+
+      // Direkt als Blob abspielen
+      try {
+        await playBase64PCM(chunk); //  playAudioChunk( data);
+
+        // audioBuffer[0] = [...chunk];
+        // console.log(audioBuffer);
+        // audioContext.decodeAudioData(new ArrayBuffer(audioBuffer)).then(audioBuffer => {
+        //   audioContext.source = audioContext.createBufferSource().buffer = audioBuffer;
+        // });
+        // const blob = new Blob([arrayBuffer], { type: 'audio/webm' }); //recorderMimeType });
+        // const url = URL.createObjectURL(blob);
+        // const audio = new Audio(url);
+        // audio.play().then(() => {
+        //   URL.revokeObjectURL(url);
+        // }).catch(err => {
+        //   log(`Wiedergabe-Fehler für Chunk ${sequence}: ${err.message}`, 'error');
+        // });
+      } catch (e) {
+        log(`Blob/Wiedergabe-Fehler für Chunk ${sequence}: ${e.message}`, 'error');
+      }
+    });
+
+    // socket.on('live-audio-echo', (data) => {
+    //   log(`Echo-Chunk empfangen: ${data.sequence}`);
+    //   playEchoAudioImproved(data.chunk, data.sequence, data.sendTime);
+    // });
+
+    socket.on('live-audio-stopped', (data) => {
+      log(`Live-Audio-Session beendet: ${data.chunkCount} chunks verarbeitet`, 'success');
+      currentSessionId = null;
+      updateEchoStatus('Server-Session beendet');
+    });
+
+    socket.on('live-audio-error', (error) => {
+      log(`Live-Audio-Fehler: ${error.error}`, 'error');
+      if (isEchoActive) {
+        stopLiveEcho();
+      }
+    });
+  });
+
+  disconnectBtn.addEventListener('click', () => {
+    if (socket) {
+      log('Trenne Verbindung...');
+      socket.disconnect();
+    }
+  });
+
+  testAudioBtn.addEventListener('click', testAudio);
+  startEchoBtn.addEventListener('click', startLiveEcho);
+  stopEchoBtn.addEventListener('click', stopLiveEcho);
+
+  // Initial log
+  log('Fixed Live Echo geladen - bereit zum Testen');
+  updateStats();
+</script>
+</body>
+</html>
