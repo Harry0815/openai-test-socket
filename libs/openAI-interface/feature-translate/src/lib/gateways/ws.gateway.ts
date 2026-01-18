@@ -85,10 +85,13 @@ export class WsGateway implements OnGatewayConnection, OnGatewayDisconnect {
    * @param args - Additional connection arguments (unused)
    */
   async handleConnection(client: WebSocket, ...args: never[]) {
-    // Initialize OpenAI Realtime handler with translation instructions
+    // Initialize OpenAI Realtime handler with default configuration
+    // Configuration can be updated later via config message
     const openAIHandler = new OpenAIRealtimeSocketHandler({
       instructions:
         'You are a simultaneous interpreter. Translate everything you receive from German to English.',
+      autoTranslationTimeout: 0, // disabled by default
+      silenceDurationMs: 250,
     });
 
     // PassThrough stream to feed audio data into FFmpeg
@@ -320,6 +323,30 @@ export class WsGateway implements OnGatewayConnection, OnGatewayDisconnect {
         timestamp: new Date().toISOString(),
       })
     );
+  }
+
+  /**
+   * Handles configuration updates from clients.
+   * Updates the OpenAI handler configuration with new parameters.
+   *
+   * @param data - The configuration data
+   * @param client - The WebSocket client sending the configuration
+   */
+  @SubscribeMessage('config')
+  handleConfig(
+    @MessageBody() data: any,
+    @ConnectedSocket() client: WebSocket
+  ): void {
+    this.logger.log(`Received configuration: ${JSON.stringify(data)}`);
+
+    const clientData = this.clients.get(client);
+    if (clientData?.openAIHandler && data.config) {
+      clientData.openAIHandler.updateConfig({
+        autoTranslationTimeout: data.config.autoTranslationTimeout,
+        silenceDurationMs: data.config.silenceDurationMs,
+      });
+      this.logger.log('Configuration updated successfully');
+    }
   }
 
   /**

@@ -66,6 +66,19 @@ export interface RealtimeSessionOptions {
    * @default 24000
    */
   outputSampleRate?: number;
+
+  /**
+   * Duration in milliseconds to wait before automatically triggering translation.
+   * If set, translation will start after this duration regardless of speech pauses.
+   * @default undefined (disabled)
+   */
+  autoTranslationTimeout?: number;
+
+  /**
+   * Duration in milliseconds of silence required to trigger translation (VAD).
+   * @default 250
+   */
+  silenceDurationMs?: number;
 }
 
 /**
@@ -89,12 +102,14 @@ export type AudioDeltaPayload = {
 /**
  * Default configuration values for realtime sessions.
  */
-const DEFAULT_OPTIONS: Required<Omit<RealtimeSessionOptions, 'instructions'>> & Pick<RealtimeSessionOptions, 'instructions'> = {
+const DEFAULT_OPTIONS: Required<Omit<RealtimeSessionOptions, 'instructions' | 'autoTranslationTimeout'>> & Pick<RealtimeSessionOptions, 'instructions' | 'autoTranslationTimeout'> = {
   model: 'gpt-4o-realtime-preview',
   voice: 'alloy',
   inputSampleRate: 24000,
   outputSampleRate: 24000,
+  silenceDurationMs: 250,
   instructions: undefined,
+  autoTranslationTimeout: undefined,
 };
 
 /**
@@ -169,6 +184,12 @@ export class OpenAIRealtimeSocketHandler {
   /** Timestamp of the last received audio delta (for latency tracking) */
   private lastAudioDeltaAt = 0;
 
+  /** Timer for automatic translation triggering */
+  private autoTranslationTimer: NodeJS.Timeout | null = null;
+
+  /** Timestamp when audio started being received */
+  private audioStartTime = 0;
+
   /**
    * Creates a new OpenAIRealtimeSocketHandler instance.
    *
@@ -184,6 +205,8 @@ export class OpenAIRealtimeSocketHandler {
       voice: opts?.voice ?? DEFAULT_OPTIONS.voice,
       model: opts?.model ?? DEFAULT_OPTIONS.model,
       instructions: opts?.instructions ?? DEFAULT_OPTIONS.instructions,
+      silenceDurationMs: opts?.silenceDurationMs ?? DEFAULT_OPTIONS.silenceDurationMs,
+      autoTranslationTimeout: opts?.autoTranslationTimeout ?? DEFAULT_OPTIONS.autoTranslationTimeout,
     } as Required<RealtimeSessionOptions>;
     this.events = new EventEmitter();
   }
@@ -305,7 +328,7 @@ export class OpenAIRealtimeSocketHandler {
         audio: {
           input: {
             format: { type: 'audio/pcm', rate: this.options.inputSampleRate },
-            turn_detection: { type: 'server_vad', threshold: 0.5, prefix_padding_ms: 200, silence_duration_ms: 250 },
+            turn_detection: { type: 'server_vad', threshold: 0.5, prefix_padding_ms: 200, silence_duration_ms: this.options.silenceDurationMs },
           },
           output: {
             voice: this.options.voice,
@@ -454,6 +477,12 @@ export class OpenAIRealtimeSocketHandler {
 
       case 'response.completed':
         this.markResponseComplete();
+        // Reset timer state but don't clear audioStartTime if we want continuous translation
+        if (this.autoTranslationTimer) {
+          clearTimeout(this.autoTranslationTimer);
+          this.autoTranslationTimer = null;
+        }
+        this.audioStartTime = 0;
         this.events.emit('response.complete', msg);
         break;
 
@@ -491,6 +520,13 @@ export class OpenAIRealtimeSocketHandler {
     if (!this.lastAudioDeltaAt) {
       this.lastAudioDeltaAt = now;
     }
+
+    // Start or restart auto-translation timer on every audio chunk
+    if (!this.audioStartTime) {
+      this.audioStartTime = now;
+    }
+    this.startAutoTranslationTimer();
+
     this.pendingInputChunks.push({ sentAt: now, size: buffer.length });
     this.logger.debug(`[latency] queued chunk ${this.pendingInputChunks.length} (${buffer.length} bytes)`);
     console.log('Sending audio chunk to OpenAI Realtime WebSocket...');
@@ -513,12 +549,75 @@ export class OpenAIRealtimeSocketHandler {
   }
 
   /**
+   * Starts the auto-translation timer if configured.
+   *
+   * This method schedules automatic translation triggering after the specified timeout.
+   * If the timer is already running, it will NOT be restarted (to ensure translation happens
+   * after the configured time from the first audio chunk).
+   */
+  private startAutoTranslationTimer() {
+    // Don't restart if timer is already running
+    if (this.autoTranslationTimer) {
+      return;
+    }
+
+    // Only start timer if autoTranslationTimeout is configured
+    if (this.options.autoTranslationTimeout && this.options.autoTranslationTimeout > 0) {
+      this.logger.debug(`[auto-translation] Starting timer for ${this.options.autoTranslationTimeout}ms`);
+      this.autoTranslationTimer = setTimeout(() => {
+        this.logger.log(`[auto-translation] Triggering translation after ${this.options.autoTranslationTimeout}ms`);
+        this.commitAudio();
+        this.requestResponse();
+        // Reset timer state so it can start again with next audio segment
+        this.audioStartTime = 0;
+        this.autoTranslationTimer = null;
+      }, this.options.autoTranslationTimeout);
+    }
+  }
+
+  /**
+   * Resets the auto-translation timer state.
+   *
+   * This method clears the timer and resets the audio start time,
+   * preparing for the next audio input sequence.
+   */
+  private resetAutoTranslationTimer() {
+    if (this.autoTranslationTimer) {
+      clearTimeout(this.autoTranslationTimer);
+      this.autoTranslationTimer = null;
+    }
+    this.audioStartTime = 0;
+  }
+
+  /**
+   * Updates the session configuration options.
+   *
+   * This method allows updating configuration parameters like autoTranslationTimeout
+   * and silenceDurationMs after the handler has been instantiated.
+   *
+   * @param opts - Partial configuration options to update
+   */
+  public updateConfig(opts: Partial<RealtimeSessionOptions>) {
+    if (opts.autoTranslationTimeout !== undefined) {
+      this.options.autoTranslationTimeout = opts.autoTranslationTimeout;
+      this.logger.log(`[config] Auto-translation timeout updated to ${opts.autoTranslationTimeout}ms`);
+    }
+    if (opts.silenceDurationMs !== undefined) {
+      this.options.silenceDurationMs = opts.silenceDurationMs;
+      this.logger.log(`[config] Silence duration updated to ${opts.silenceDurationMs}ms`);
+      // Send session update to apply new VAD settings
+      this.sendSessionCreate();
+    }
+  }
+
+  /**
    * Closes the WebSocket connection.
    *
    * This method gracefully terminates the connection to OpenAI.
    * Any pending operations will be cancelled.
    */
   public close() {
+    this.resetAutoTranslationTimer();
     try {
       this.ws.close();
     } catch (err) {

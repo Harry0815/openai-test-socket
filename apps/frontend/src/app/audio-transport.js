@@ -190,6 +190,18 @@ export class AudioTransport {
     this._setStreaming(this.socket?.readyState === WebSocket.OPEN);
   }
 
+  sendConfig(config) {
+    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+      this.socket.send(JSON.stringify({
+        type: 'config',
+        config,
+      }));
+      this._notify(`Konfiguration gesendet: ${JSON.stringify(config)}`);
+    } else {
+      this._notify('Kann Konfiguration nicht senden: keine aktive Verbindung');
+    }
+  }
+
   sendChunk({ payload, encoder }) {
     if (this.dataChannel && this.dataChannel.readyState === 'open') {
       this.dataChannel.send(this._wrapPayload(payload, encoder));

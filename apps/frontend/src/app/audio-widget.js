@@ -4,6 +4,8 @@ import { AudioTransport } from './audio-transport.js';
 const defaultConfig = {
   transportUrl: 'ws://localhost:3000/ws',
   encoder: 'pcm',
+  autoTranslationTimeout: 250, // Start translation after 250ms
+  silenceDurationMs: 250,
 };
 
 export class AudioWidget {
@@ -36,7 +38,12 @@ export class AudioWidget {
   async start() {
     this._resetFallbackBadge();
     try {
-      // await this.transport.connect();
+      // Send configuration to backend
+      this.transport.sendConfig({
+        autoTranslationTimeout: this.config.autoTranslationTimeout,
+        silenceDurationMs: this.config.silenceDurationMs,
+      });
+
       await this.streamService.startCapture({ encoder: this.encoderSelect.value });
       this._setRunning(true);
     } catch (err) {
@@ -118,6 +125,18 @@ export class AudioWidget {
         </label>
         <span class="badge badge-idle" data-ref="status">bereit</span>
       </div>
+      <div class="settings">
+        <label class="input-group">
+          Auto-Übersetzung nach (ms):
+          <input type="number" data-ref="autoTimeout" value="${this.config.autoTranslationTimeout}" min="0" step="100" />
+          <small>0 = deaktiviert, empfohlen: 3000-5000ms</small>
+        </label>
+        <label class="input-group">
+          Sprechpausen-Erkennung (ms):
+          <input type="number" data-ref="silenceDuration" value="${this.config.silenceDurationMs}" min="100" step="50" />
+          <small>Zeit ohne Sprache bis Übersetzung startet</small>
+        </label>
+      </div>
       <div class="meter" aria-label="Pegel">
         <div class="meter-bar" data-ref="bar"></div>
         <span class="meter-text" data-ref="level">– dB</span>
@@ -133,6 +152,8 @@ export class AudioWidget {
     this.startButton = this.root.querySelector('[data-action="start"]');
     this.stopButton = this.root.querySelector('[data-action="stop"]');
     this.encoderSelect = this.root.querySelector('[data-ref="encoder"]');
+    this.autoTimeoutInput = this.root.querySelector('[data-ref="autoTimeout"]');
+    this.silenceDurationInput = this.root.querySelector('[data-ref="silenceDuration"]');
     this.levelBar = this.root.querySelector('[data-ref="bar"]');
     this.levelText = this.root.querySelector('[data-ref="level"]');
     this.statusBox = this.root.querySelector('[data-ref="log"]');
@@ -143,6 +164,16 @@ export class AudioWidget {
 
     this.startButton.addEventListener('click', () => this.start());
     this.stopButton.addEventListener('click', () => this.stop());
+
+    // Update config when settings change
+    this.autoTimeoutInput.addEventListener('change', (e) => {
+      this.config.autoTranslationTimeout = parseInt(e.target.value, 10);
+      this._logStatus(`Auto-Übersetzung: ${this.config.autoTranslationTimeout}ms`);
+    });
+    this.silenceDurationInput.addEventListener('change', (e) => {
+      this.config.silenceDurationMs = parseInt(e.target.value, 10);
+      this._logStatus(`Sprechpausen-Erkennung: ${this.config.silenceDurationMs}ms`);
+    });
   }
 }
 
