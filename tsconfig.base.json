@@ -19,8 +19,8 @@
       "@ai-services/ai-helper": [
         "libs/openAI-interface/ai-helper/src/index.ts"
       ],
-      "@ai-services/feature-first-test": [
-        "libs/openAI-interface/feature-first-test/src/index.ts"
+      "@ai-services/feature-simultan-dolmetscher": [
+        "libs/openAI-interface/feature-simultan-dolmetscher/src/index.ts"
       ],
       "@ai-services/feature-translate": [
         "libs/openAI-interface/feature-translate/src/index.ts"

@@ -33,7 +33,7 @@
       "options": {
         "targetName": "test"
       },
-      "exclude": ["apps/test-socket-e2e/**/*"]
+      "exclude": ["apps/simultan-dolmetscher-e2e/**/*"]
     }
   ]
 }
