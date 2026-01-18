@@ -40,7 +40,7 @@ export class AudioStreamService {
     encoder = 'pcm',
     useNoiseSuppression = true,
     useEchoCancellation = true,
-    chunkSize = 4096,
+    chunkSize = 2048,
   } = {}) {
     if (this.isCapturing) {
       return;

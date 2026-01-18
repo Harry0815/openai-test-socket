@@ -1,0 +1,6 @@
+## AI Assistant
+
+netstat -ano | findstr :3000
+tasklist /FI "PID eq 21168"
+taskkill //PID 21168 //F
+

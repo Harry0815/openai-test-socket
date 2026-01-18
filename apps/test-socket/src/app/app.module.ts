@@ -1,7 +1,4 @@
 import { Module } from '@nestjs/common';
-import { PingController } from './controllers/ping.controller';
-import { HealthController } from './controllers/health.controller';
-import { EchoController } from './controllers/echo.controller';
 import { StaticController } from './controllers/static.controller';
 import {
   FeatureTranslateModule,
@@ -16,9 +13,6 @@ import {
     FeatureFirstTestModule,
   ],
   controllers: [
-    PingController,
-    HealthController,
-    EchoController,
     StaticController
   ],
   providers: [ ],

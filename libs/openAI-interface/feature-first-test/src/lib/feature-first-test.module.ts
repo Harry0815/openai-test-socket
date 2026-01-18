@@ -7,10 +7,14 @@ import {
   SocketLiveAudioService,
 } from './services';
 import { SocketioGateway } from './gateways/socket-io.gateway';
+import { PingController, HealthController, EchoController } from './controllers';
 
 @Module({
   imports: [ ],
   controllers: [
+    PingController,
+    HealthController,
+    EchoController
   ],
   providers: [
     AudioService,
@@ -20,13 +24,6 @@ import { SocketioGateway } from './gateways/socket-io.gateway';
     SocketLiveAudioService,
     SocketioGateway
   ],
-  exports: [
-    AudioService,
-    EchoService,
-    HealthService,
-    PingService,
-    SocketLiveAudioService,
-    SocketioGateway
-  ]
+  exports: [ ]
 })
 export class FeatureFirstTestModule {}
